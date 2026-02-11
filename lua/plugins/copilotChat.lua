@@ -21,7 +21,7 @@ return {
 				assistant = "🤖 Copilot",
 				tool = "🔧 Tool",
 			},
-auto_insert_mode = true,
+            auto_insert_mode = true,
 			separator = "━━",
 			auto_fold = true, -- Automatically folds non-assistant messages
 			model = "claude-sonnet-4",

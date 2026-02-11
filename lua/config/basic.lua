@@ -43,3 +43,5 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.bo.filetype = "markdown"
   end,
 })
+
+vim.opt.fileformats = {"unix", "dos"}
