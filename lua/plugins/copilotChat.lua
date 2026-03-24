@@ -4,6 +4,7 @@ return {
 		dependencies = {
 			{ "nvim-lua/plenary.nvim", branch = "master" },
 		},
+        enabled = false,
 		build = "make tiktoken",
 		opts = {
 
