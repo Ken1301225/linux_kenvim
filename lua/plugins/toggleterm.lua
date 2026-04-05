@@ -7,7 +7,7 @@ return {
 
 		require("toggleterm").setup({
 			cmd = "zsh", -- 将默认终端修改为 zsh
-			size = 63,
+			size = 50,
 			open_mapping = [[<c-\>]],
 			direction = "vertical", -- 默认终端使用垂直分割
 			start_in_insert = true,

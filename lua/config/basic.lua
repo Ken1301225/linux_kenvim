@@ -45,3 +45,9 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 vim.opt.fileformats = {"unix", "dos"}
+
+
+vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "CursorHoldI", "FocusGained" }, {
+  pattern = "*",
+  command = "if mode() != 'c' | checktime | endif",
+})
