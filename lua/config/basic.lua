@@ -13,6 +13,7 @@ vim.opt.hlsearch = false
 vim.opt.colorcolumn = "90"
 vim.opt.clipboard = "unnamedplus"
 vim.opt.nrformats = "bin,hex,alpha"
+vim.opt.termguicolors = true
 vim.o.exrc = true
 
 -- 自动用 feh 打开图片，zathura 打开 PDF
