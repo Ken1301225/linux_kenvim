@@ -26,7 +26,7 @@ return {
     keys = {
         { "<leader>bh", ":BufferLineCyclePrev<CR>", silent = true },
         { "<leader>bl", ":BufferLineCycleNext<CR>", silent = true },
-        { "<leader>bp", ":BufferLineCyclePick<CR>", silent = true },
+        { "<leader>bp", ":BufferLinePick<CR>", silent = true },
         { "<leader>bd", ":bdelete<CR>",             silent = true },
     },
     lazy = false,

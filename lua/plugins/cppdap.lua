@@ -1,5 +1,6 @@
 return {
 	"mfussenegger/nvim-dap",
+    enabled = false,
     dependencies = {
         {'theHamsta/nvim-dap-virtual-text',
             config = function (_,opts)
