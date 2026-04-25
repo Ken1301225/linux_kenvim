@@ -7,7 +7,7 @@ return {
 				"javac $fileName &&",
 				"java $fileNameWithoutExt",
 			},
-			python = "python3 -u",
+			python = "/home/ken/miniconda3/bin/python3 -u",
 			typescript = "deno run",
 			rust = {
 				"cd $dir &&",
@@ -49,9 +49,7 @@ return {
 		},
 	},
 	config = function(_, opts)
-		require("code_runner").setup({
-			opts,
-		})
+		require("code_runner").setup(opts)
 		vim.keymap.set("n", "<leader>rr", function()
 			vim.cmd("w") -- 保存
 			vim.cmd("RunCode") -- 运行
