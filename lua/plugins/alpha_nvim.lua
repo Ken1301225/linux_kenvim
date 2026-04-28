@@ -10,6 +10,8 @@ return {
     local dashboard = require("alpha.themes.dashboard")
     local theta = require("alpha.themes.theta")
     local recent_files_width = 44
+    local card_width = 26
+    local ai_stats_cache
 
     local function open_tree_for_alpha()
       vim.schedule(function()
@@ -130,6 +132,120 @@ return {
       }
     end
 
+    local function format_count(n)
+      if n >= 1000000000 then
+        return string.format("%.1fB", n / 1000000000)
+      elseif n >= 1000000 then
+        return string.format("%.1fM", n / 1000000)
+      elseif n >= 1000 then
+        return string.format("%.1fK", n / 1000)
+      end
+      return tostring(n)
+    end
+
+    local function fetch_ai_stats()
+      if ai_stats_cache then
+        return ai_stats_cache
+      end
+
+      local stats = {}
+
+      local function db_query(db, query)
+        local ok, result = pcall(vim.fn.system, { "sqlite3", vim.fn.expand(db), query })
+        if ok then
+          return vim.trim(result)
+        end
+        return nil
+      end
+
+      local function db_count(db, query)
+        local r = db_query(db, query)
+        return r and tonumber(r) or 0
+      end
+
+      stats.opencode = {
+        sessions = db_count("~/.local/share/opencode/opencode.db", "SELECT COUNT(*) FROM session"),
+        messages = db_count("~/.local/share/opencode/opencode.db", "SELECT COUNT(*) FROM message"),
+        adds = db_count("~/.local/share/opencode/opencode.db", "SELECT COALESCE(SUM(summary_additions),0) FROM session"),
+        dels = db_count("~/.local/share/opencode/opencode.db", "SELECT COALESCE(SUM(summary_deletions),0) FROM session"),
+        files = db_count("~/.local/share/opencode/opencode.db", "SELECT COALESCE(SUM(summary_files),0) FROM session"),
+      }
+
+      local cx = db_query("~/.codex/state_5.sqlite", "SELECT COUNT(*), COALESCE(SUM(tokens_used),0) FROM threads")
+      local cx_threads, cx_tokens = 0, 0
+      if cx then
+        cx_threads = tonumber(cx:match("^(%d+)")) or 0
+        cx_tokens = tonumber(cx:match("|(%d+)")) or 0
+      end
+      stats.codex = {
+        threads = cx_threads,
+        tokens = cx_tokens,
+        jobs = db_count("~/.codex/state_5.sqlite", "SELECT COUNT(*) FROM jobs"),
+      }
+
+      local cl_projects = tonumber(vim.fn.system("ls -d ~/.claude/projects/*/ 2>/dev/null | wc -l")) or 0
+      local cl_history_path = vim.fn.expand("~/.claude/history.jsonl")
+      local cl_history = 0
+      if vim.fn.filereadable(cl_history_path) == 1 then
+        cl_history = tonumber(vim.fn.system("wc -l < " .. vim.fn.shellescape(cl_history_path))) or 0
+      end
+      stats.claude = { projects = cl_projects, history = cl_history }
+
+      ai_stats_cache = stats
+      return stats
+    end
+
+    local function make_card(title, lines, width)
+      local card = {}
+      local inner_w = width - 4
+      card[#card + 1] = "┌" .. string.rep("─", width - 2) .. "┐"
+      card[#card + 1] = "│ " .. pad_display(title, inner_w) .. " │"
+      card[#card + 1] = "├" .. string.rep("─", width - 2) .. "┤"
+      for _, line in ipairs(lines) do
+        card[#card + 1] = "│ " .. pad_display(line, inner_w) .. " │"
+      end
+      card[#card + 1] = "└" .. string.rep("─", width - 2) .. "┘"
+      return card
+    end
+
+    local function bordered_ai_stats()
+      return {
+        type = "group",
+        val = function()
+          ai_stats_cache = nil
+          local stats = fetch_ai_stats()
+          local items = {}
+
+          local opencode_card = make_card("OpenCode", {
+            string.format("Sessions     %s", format_count(stats.opencode.sessions)),
+            string.format("Messages     %s", format_count(stats.opencode.messages)),
+            string.format("+%s/-%s (%sf)", format_count(stats.opencode.adds), format_count(stats.opencode.dels), format_count(stats.opencode.files)),
+          }, card_width)
+
+          local codex_card = make_card("Codex", {
+            string.format("Threads      %s", format_count(stats.codex.threads)),
+            string.format("Tokens       %s", format_count(stats.codex.tokens)),
+            string.format("Jobs         %s", format_count(stats.codex.jobs)),
+          }, card_width)
+
+          local claude_card = make_card("Claude", {
+            string.format("Projects     %s", format_count(stats.claude.projects)),
+            string.format("History      %s", format_count(stats.claude.history)),
+          }, card_width)
+
+          local max_rows = math.max(#opencode_card, #codex_card, #claude_card)
+          for i = 1, max_rows do
+            local row = (opencode_card[i] or string.rep(" ", card_width)) .. " "
+              .. (codex_card[i] or string.rep(" ", card_width)) .. " "
+              .. (claude_card[i] or string.rep(" ", card_width))
+            items[#items + 1] = { type = "text", val = row, opts = { hl = "SpecialComment", position = "center" } }
+          end
+
+          return items
+        end,
+      }
+    end
+
     theta.header.val = {
       "██╗  ██╗███████╗███╗   ██╗██╗   ██╗██╗███╗   ███╗",
       "██║ ██╔╝██╔════╝████╗  ██║██║   ██║██║████╗ ████║",
@@ -153,7 +269,9 @@ return {
     theta.config.layout = {
       { type = "padding", val = 2 },
       theta.header,
-      { type = "padding", val = 2 },
+      { type = "padding", val = 1 },
+      bordered_ai_stats(),
+      { type = "padding", val = 1 },
       bordered_recent_files(),
       { type = "padding", val = 2 },
       theta.buttons,

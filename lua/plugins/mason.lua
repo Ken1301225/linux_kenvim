@@ -68,8 +68,8 @@ return {
 					server_on_attach(client, bufnr)
 				end
 			end
-			vim.lsp.enable(nvim_lsp)
 			vim.lsp.config(nvim_lsp, config)
+			vim.lsp.enable(nvim_lsp)
 		end
 		setup("lua-language-server", {
 			settings = {
@@ -109,11 +109,7 @@ return {
 				},
 			},
 		})
-		setup("ruff", {
-			init_options = {
-				settings = {},
-			},
-		})
+		setup("ruff", {})
 		setup("clangd", {
 			cmd = {
 				"clangd",

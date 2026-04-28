@@ -30,6 +30,6 @@ return {
        })
    end,
    keys = {
-       {"<leader>lf" , vim.lsp.buf.format }
+        {"<leader>lf", function() vim.lsp.buf.format({ async = true }) end, desc = "Format"}
    }
 }
