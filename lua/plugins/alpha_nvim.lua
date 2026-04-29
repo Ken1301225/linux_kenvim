@@ -10,7 +10,6 @@ return {
     local dashboard = require("alpha.themes.dashboard")
     local theta = require("alpha.themes.theta")
     local recent_files_width = 44
-    local card_width = 26
     local ai_stats_cache
 
     local function open_tree_for_alpha()
@@ -93,7 +92,7 @@ return {
           local top_border = "┌" .. string.rep("─", recent_files_width + 2) .. "┐"
           local separator = "├" .. string.rep("─", recent_files_width + 2) .. "┤"
           local bottom_border = "└" .. string.rep("─", recent_files_width + 2) .. "┘"
-          local recent_files = theta.mru(0, vim.fn.getcwd(), 8)
+          local recent_files = theta.mru(0, vim.fn.getcwd(), 5)
 
           table.insert(items, { type = "text", val = top_border, opts = { hl = "SpecialComment", position = "center" } })
           table.insert(items, {
@@ -163,49 +162,85 @@ return {
         return r and tonumber(r) or 0
       end
 
-      stats.opencode = {
-        sessions = db_count("~/.local/share/opencode/opencode.db", "SELECT COUNT(*) FROM session"),
-        messages = db_count("~/.local/share/opencode/opencode.db", "SELECT COUNT(*) FROM message"),
-        adds = db_count("~/.local/share/opencode/opencode.db", "SELECT COALESCE(SUM(summary_additions),0) FROM session"),
-        dels = db_count("~/.local/share/opencode/opencode.db", "SELECT COALESCE(SUM(summary_deletions),0) FROM session"),
-        files = db_count("~/.local/share/opencode/opencode.db", "SELECT COALESCE(SUM(summary_files),0) FROM session"),
-      }
+      local week_ms = os.time() * 1000 - 7 * 86400 * 1000
 
-      local cx = db_query("~/.codex/state_5.sqlite", "SELECT COUNT(*), COALESCE(SUM(tokens_used),0) FROM threads")
+      -- OpenCode
+      local op_db = "~/.local/share/opencode/opencode.db"
+      stats.opencode = {
+        sessions = db_count(op_db, "SELECT COUNT(*) FROM session"),
+        sessions_wk = db_count(op_db, "SELECT COUNT(*) FROM session WHERE time_created > " .. week_ms),
+      }
+      local op_tok = db_query(op_db, "SELECT COALESCE(SUM(json_extract(data,'$.tokens.input')),0)+COALESCE(SUM(json_extract(data,'$.tokens.output')),0)+COALESCE(SUM(json_extract(data,'$.tokens.cache.read')),0) FROM message WHERE json_extract(data,'$.role')='assistant'")
+      stats.opencode.tokens = op_tok and math.floor(tonumber(op_tok) or 0) or 0
+      local op_tok_wk = db_query(op_db, "SELECT COALESCE(SUM(json_extract(data,'$.tokens.input')),0)+COALESCE(SUM(json_extract(data,'$.tokens.output')),0)+COALESCE(SUM(json_extract(data,'$.tokens.cache.read')),0) FROM message WHERE json_extract(data,'$.role')='assistant' AND time_created > " .. week_ms)
+      stats.opencode.tokens_wk = op_tok_wk and math.floor(tonumber(op_tok_wk) or 0) or 0
+      local op_model = db_query(op_db, "SELECT json_extract(data,'$.modelID') FROM message WHERE json_extract(data,'$.role')='assistant' GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1")
+      stats.opencode.model = op_model or "?"
+
+      -- Codex
+      local cx_db = "~/.codex/state_5.sqlite"
+      local cx = db_query(cx_db, "SELECT COUNT(*), COALESCE(SUM(tokens_used),0) FROM threads")
       local cx_threads, cx_tokens = 0, 0
       if cx then
         cx_threads = tonumber(cx:match("^(%d+)")) or 0
         cx_tokens = tonumber(cx:match("|(%d+)")) or 0
       end
+      local cx_wk = db_query(cx_db, "SELECT COUNT(*), COALESCE(SUM(tokens_used),0) FROM threads WHERE created_at_ms > " .. week_ms)
+      local cx_threads_wk, cx_tokens_wk = 0, 0
+      if cx_wk then
+        cx_threads_wk = tonumber(cx_wk:match("^(%d+)")) or 0
+        cx_tokens_wk = tonumber(cx_wk:match("|(%d+)")) or 0
+      end
+      local cx_model = db_query(cx_db, "SELECT model FROM threads WHERE model != '' AND model != '?' GROUP BY model ORDER BY COUNT(*) DESC LIMIT 1")
       stats.codex = {
-        threads = cx_threads,
+        sessions = cx_threads,
+        sessions_wk = cx_threads_wk,
         tokens = cx_tokens,
-        jobs = db_count("~/.codex/state_5.sqlite", "SELECT COUNT(*) FROM jobs"),
+        tokens_wk = cx_tokens_wk,
+        model = cx_model or "?",
       }
 
-      local cl_projects = tonumber(vim.fn.system("ls -d ~/.claude/projects/*/ 2>/dev/null | wc -l")) or 0
+      -- Claude
       local cl_history_path = vim.fn.expand("~/.claude/history.jsonl")
-      local cl_history = 0
+      local cl_sessions, cl_messages, cl_sessions_wk, cl_messages_wk = 0, 0, 0, 0
       if vim.fn.filereadable(cl_history_path) == 1 then
-        cl_history = tonumber(vim.fn.system("wc -l < " .. vim.fn.shellescape(cl_history_path))) or 0
+        local py_script = string.format([[
+import json, sys
+week_ms = %d
+sessions = set()
+count = 0
+sessions_wk = set()
+count_wk = 0
+with open(sys.argv[1]) as f:
+    for line in f:
+        try:
+            d = json.loads(line)
+            sid = d.get('sessionId','')
+            ts = d.get('timestamp',0)
+            sessions.add(sid)
+            count += 1
+            if ts > week_ms:
+                sessions_wk.add(sid)
+                count_wk += 1
+        except: pass
+print(len(sessions), count, len(sessions_wk), count_wk)
+]], week_ms)
+        local result = vim.fn.system({ "python3", "-c", py_script, cl_history_path })
+        local a, b, c, d = result:match("(%d+) (%d+) (%d+) (%d+)")
+        cl_sessions = tonumber(a) or 0
+        cl_messages = tonumber(b) or 0
+        cl_sessions_wk = tonumber(c) or 0
+        cl_messages_wk = tonumber(d) or 0
       end
-      stats.claude = { projects = cl_projects, history = cl_history }
+      stats.claude = {
+        sessions = cl_sessions,
+        sessions_wk = cl_sessions_wk,
+        messages = cl_messages,
+        messages_wk = cl_messages_wk,
+      }
 
       ai_stats_cache = stats
       return stats
-    end
-
-    local function make_card(title, lines, width)
-      local card = {}
-      local inner_w = width - 4
-      card[#card + 1] = "┌" .. string.rep("─", width - 2) .. "┐"
-      card[#card + 1] = "│ " .. pad_display(title, inner_w) .. " │"
-      card[#card + 1] = "├" .. string.rep("─", width - 2) .. "┤"
-      for _, line in ipairs(lines) do
-        card[#card + 1] = "│ " .. pad_display(line, inner_w) .. " │"
-      end
-      card[#card + 1] = "└" .. string.rep("─", width - 2) .. "┘"
-      return card
     end
 
     local function bordered_ai_stats()
@@ -216,30 +251,18 @@ return {
           local stats = fetch_ai_stats()
           local items = {}
 
-          local opencode_card = make_card("OpenCode", {
-            string.format("Sessions     %s", format_count(stats.opencode.sessions)),
-            string.format("Messages     %s", format_count(stats.opencode.messages)),
-            string.format("+%s/-%s (%sf)", format_count(stats.opencode.adds), format_count(stats.opencode.dels), format_count(stats.opencode.files)),
-          }, card_width)
+          table.insert(items, { type = "text", val = "AI Usage (total / this week)", opts = { hl = "SpecialComment", position = "center" } })
+          table.insert(items, { type = "padding", val = 1 })
 
-          local codex_card = make_card("Codex", {
-            string.format("Threads      %s", format_count(stats.codex.threads)),
-            string.format("Tokens       %s", format_count(stats.codex.tokens)),
-            string.format("Jobs         %s", format_count(stats.codex.jobs)),
-          }, card_width)
-
-          local claude_card = make_card("Claude", {
-            string.format("Projects     %s", format_count(stats.claude.projects)),
-            string.format("History      %s", format_count(stats.claude.history)),
-          }, card_width)
-
-          local max_rows = math.max(#opencode_card, #codex_card, #claude_card)
-          for i = 1, max_rows do
-            local row = (opencode_card[i] or string.rep(" ", card_width)) .. " "
-              .. (codex_card[i] or string.rep(" ", card_width)) .. " "
-              .. (claude_card[i] or string.rep(" ", card_width))
-            items[#items + 1] = { type = "text", val = row, opts = { hl = "SpecialComment", position = "center" } }
+          local function tool_line(name, n_sess, w_sess, n_col2, w_col2, col2_label, extra)
+            return string.format("%-9s %s sess (+%s/wk)  |  %s %s (+%s/wk)  |  %s",
+              name, format_count(n_sess), format_count(w_sess),
+              format_count(n_col2), col2_label, format_count(w_col2), extra)
           end
+
+          table.insert(items, { type = "text", val = tool_line("OpenCode", stats.opencode.sessions, stats.opencode.sessions_wk, stats.opencode.tokens, stats.opencode.tokens_wk, "tkn", "@" .. stats.opencode.model), opts = { hl = "Comment", position = "center" } })
+          table.insert(items, { type = "text", val = tool_line("Codex", stats.codex.sessions, stats.codex.sessions_wk, stats.codex.tokens, stats.codex.tokens_wk, "tkn", "@" .. stats.codex.model), opts = { hl = "Comment", position = "center" } })
+          table.insert(items, { type = "text", val = tool_line("Claude", stats.claude.sessions, stats.claude.sessions_wk, stats.claude.messages, stats.claude.messages_wk, "msgs", ""), opts = { hl = "Comment", position = "center" } })
 
           return items
         end,
@@ -267,13 +290,13 @@ return {
     }
 
     theta.config.layout = {
-      { type = "padding", val = 2 },
+      { type = "padding", val = 1 },
       theta.header,
       { type = "padding", val = 1 },
       bordered_ai_stats(),
       { type = "padding", val = 1 },
       bordered_recent_files(),
-      { type = "padding", val = 2 },
+      { type = "padding", val = 1 },
       theta.buttons,
       { type = "padding", val = 1 },
       {
