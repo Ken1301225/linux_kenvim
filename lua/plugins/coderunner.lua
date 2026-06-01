@@ -7,7 +7,9 @@ return {
 				"javac $fileName &&",
 				"java $fileNameWithoutExt",
 			},
-			python = "/home/ken/miniconda3/bin/python3 -u",
+			python = function()
+					return require("config.conda").get_python_path() .. " -u"
+				end,
 			typescript = "deno run",
 			rust = {
 				"cd $dir &&",

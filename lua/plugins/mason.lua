@@ -87,6 +87,7 @@ return {
 					disableTaggedHints = true,
 				},
 				python = {
+					pythonPath = require("config.conda").get_python_path(),
 					analysis = {
 						typeCheckingMode = "basic",
 						autoSearchPaths = true,

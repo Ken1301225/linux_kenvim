@@ -47,6 +47,13 @@ vim.api.nvim_create_autocmd("FileType", {
 
 vim.opt.fileformats = {"unix", "dos"}
 
+-- 禁用内置的 code action lightbulb (💡)
+vim.lsp.config.code_action = {
+  lightbulb = {
+    enable = false,
+  },
+}
+
 
 vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "CursorHoldI", "FocusGained" }, {
   pattern = "*",

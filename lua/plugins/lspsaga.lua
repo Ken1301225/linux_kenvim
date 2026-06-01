@@ -6,6 +6,9 @@ return {
         symbol_in_winbar = {
             enable = true
         },
+        lightbulb = {
+            enable = false,
+        },
         finder = {
             keys = {
                 toggle_or_open = "<CR>"

@@ -135,7 +135,6 @@ end
 
 return {
     "kawre/leetcode.nvim",
-    build = ":TSUpdate html",
     cmd = { "Leet", "LeetHot100" },
     dependencies = {
         "nvim-lua/plenary.nvim",
@@ -155,8 +154,19 @@ return {
             translate_problems = true,
         },
         storage = {
-            home = vim.fn.stdpath("data") .. "/leetcode",
+            home = "/home/ken/Project/OI/hot100",
             cache = vim.fn.stdpath("cache") .. "/leetcode",
+        },
+        theme = {
+            [""] = { fg = "#d7dae0" },
+            normal = { fg = "#d7dae0" },
+            alt = { fg = "#a6adc8" },
+            list = { fg = "#89b4fa" },
+            code = { fg = "#cdd6f4", bg = "NONE" },
+            example = { fg = "#a6e3a1" },
+            constraints = { fg = "#89dceb" },
+            header = { fg = "#f9e2af", bold = true },
+            link = { fg = "#89b4fa", underline = true },
         },
         plugins = {
             non_standalone = false,

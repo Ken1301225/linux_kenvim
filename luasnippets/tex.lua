@@ -3,6 +3,7 @@ local s = ls.snippet
 local t = ls.text_node
 local i = ls.insert_node
 local fmt = require("luasnip.extras.fmt").fmt
+local rep = require("luasnip.extras").rep
 
 local snips = {
 	-- ============================================================
@@ -32,6 +33,20 @@ local snips = {
 	{}
 \end{{align*}}
 ]], { i(1) })),
+
+	s("mk", fmt("${}$", { i(1) })),
+
+	s("dm", fmt([[
+\[
+	{}
+\]
+]], { i(1) })),
+
+	s("beg", fmt([[
+\begin{{{}}}
+	{}
+\end{{{}}}
+]], { i(1), i(2), rep(1) })),
 
 	s("enum", fmt([[
 \begin{{enumerate}}
@@ -151,11 +166,47 @@ local snips = {
 	s("INT", fmt("\\int_{{ {} }}^{{ {} }} {} \\,d{}", { i(1), i(2), i(3), i(4) })),
 	s("lim", fmt("\\lim_{{ {} \\to {} }}", { i(1), i(2) })),
 	s("frac", fmt("\\frac{{ {} }}{{ {} }}", { i(1), i(2) })),
+	s("ff", fmt("\\frac{{ {} }}{{ {} }}", { i(1), i(2) })),
+	s("dff", fmt("\\dfrac{{ {} }}{{ {} }}", { i(1), i(2) })),
 	s("sqrt", fmt("\\sqrt{{ {} }}", { i(1) })),
+	s("abs", fmt("\\left| {} \\right|", { i(1) })),
+	s("norm", fmt("\\left\\| {} \\right\\|", { i(1) })),
+	s("set", fmt("\\left\\{{ {} \\right\\}}", { i(1) })),
+	s("ceil", fmt("\\left\\lceil {} \\right\\rceil", { i(1) })),
+	s("floor", fmt("\\left\\lfloor {} \\right\\rfloor", { i(1) })),
+	s("vec", fmt("\\vec{{ {} }}", { i(1) })),
+	s("hat", fmt("\\hat{{ {} }}", { i(1) })),
+	s("bar", fmt("\\bar{{ {} }}", { i(1) })),
+	s("dot", fmt("\\dot{{ {} }}", { i(1) })),
+	s("ddot", fmt("\\ddot{{ {} }}", { i(1) })),
+	s("ub", fmt("\\underbrace{{ {} }}_{{ {} }}", { i(1), i(2) })),
+	s("ob", fmt("\\overbrace{{ {} }}^{{ {} }}", { i(1), i(2) })),
 
 	s("inf", { t("\\infty") }),
 	s("pto", { t("\\partial") }),
 	s("nab", { t("\\nabla") }),
+	s("grad", { t("\\nabla") }),
+	s("del", { t("\\partial") }),
+	s("cdot", { t("\\cdot") }),
+	s("times", { t("\\times") }),
+	s("leq", { t("\\leq") }),
+	s("geq", { t("\\geq") }),
+	s("neq", { t("\\neq") }),
+	s("approx", { t("\\approx") }),
+	s("->", { t("\\to") }),
+	s("|->", { t("\\mapsto") }),
+	s("inn", { t("\\in") }),
+	s("notin", { t("\\notin") }),
+	s("sube", { t("\\subseteq") }),
+	s("supe", { t("\\supseteq") }),
+
+	-- text wrappers
+	s("bf", fmt("\\textbf{{ {} }}", { i(1) })),
+	s("em", fmt("\\emph{{ {} }}", { i(1) })),
+	s("tt", fmt("\\texttt{{ {} }}", { i(1) })),
+	s("mbb", fmt("\\mathbb{{ {} }}", { i(1) })),
+	s("mcal", fmt("\\mathcal{{ {} }}", { i(1) })),
+	s("mrm", fmt("\\mathrm{{ {} }}", { i(1) })),
 
 	-- \mathcal shortcuts
 	s("cA", { t("\\mathcal{A}") }),
