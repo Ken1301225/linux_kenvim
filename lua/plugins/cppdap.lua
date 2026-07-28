@@ -207,6 +207,7 @@ return {
 		},
 		{
 			"mfussenegger/nvim-dap-python",
+			lazy = true,
 			config = function()
 				require("dap-python").setup(python_with_debugpy())
 			end,

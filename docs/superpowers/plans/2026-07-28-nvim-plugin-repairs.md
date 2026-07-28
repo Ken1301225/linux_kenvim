@@ -230,7 +230,7 @@ Run:
 
 ```bash
 nvim --clean -l tests/config/lazy_specs.lua
-nvim --headless "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
 ```
 
 Expected: `lazy_specs: 0 failed`; both runtime assertions exit 0.
@@ -410,10 +410,10 @@ Expected: every process exits 0 with zero failed assertions.
 Run:
 
 ```bash
-nvim --headless +qa
-nvim --headless --startuptime /tmp/nvim-repaired-startup.log +qa
-nvim --headless "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
-nvim --headless "+checkhealth" "+w! /tmp/nvim-repaired-health.txt" +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua --startuptime /tmp/nvim-repaired-startup.log +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua "+checkhealth" "+w! /tmp/nvim-repaired-health.txt" +qa
 ```
 
 Expected: all commands exit 0; DAP assertions pass; health output has no Python provider or lazy.nvim LuaRocks error.
@@ -433,4 +433,3 @@ Expected: no relevant error matches, no whitespace errors, and only intentional 
 - [ ] **Step 7: Record environment verification**
 
 No repository commit is required for the Python package installation. Record the installed `pynvim` path and measured startup time in the final handoff.
-
