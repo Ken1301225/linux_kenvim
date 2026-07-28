@@ -62,6 +62,7 @@ function M.open()
     zindex = 40,
   })
   vim.wo[M._win].wrap = false
+  M._attached = nil
   M.refresh()
 end
 
@@ -83,14 +84,26 @@ end
 function M.refresh()
   if not (M._win and vim.api.nvim_win_is_valid(M._win)) then return end
   local view = require("todo.ui." .. M.state.view)
-  view.attach({
+  local ctx = {
     buf = M._buf,
     win = M._win,
+    side_buf = M._side_buf,
+    side_win = M._side_win,
     cfg = M.cfg,
     state = M.state,
     refresh = M.refresh,
     actions = M.actions,
-  })
+  }
+  if M._attached ~= M.state.view then
+    view.attach(ctx)
+    M._attached = M.state.view
+  else
+    view.render(ctx)
+  end
+  local ok, sidebar = pcall(require, "todo.ui.sidebar")
+  if ok then
+    sidebar.render(ctx)
+  end
 end
 
 -- 保存结果统一处理（含外部修改冲突）

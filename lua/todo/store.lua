@@ -114,4 +114,14 @@ function M.by_date(date)
   return out
 end
 
+-- 一遍构建 date -> tasks 映射（渲染用，任务保持文件顺序）
+function M.by_date_map()
+  local map = {}
+  for _, t in ipairs(M.tasks) do
+    if not map[t.date] then map[t.date] = {} end
+    map[t.date][#map[t.date] + 1] = t
+  end
+  return map
+end
+
 return M

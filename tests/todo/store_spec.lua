@@ -52,5 +52,13 @@ local ok4, err4 = store.toggle("不存在的id")
 h.eq(ok4, false, "不存在 id 报错")
 h.eq(err4, "not found", "not found 标记")
 
+-- by_date_map
+store.add({ title = "甲", date = "2026-07-01", priority = "medium", done = false, notes = "" })
+store.add({ title = "乙", date = "2026-07-01", priority = "medium", done = false, notes = "" })
+store.add({ title = "丙", date = "2026-07-02", priority = "medium", done = false, notes = "" })
+local dm = store.by_date_map()
+h.eq(#dm["2026-07-01"], 2, "by_date_map 同日两个")
+h.eq(dm["2026-07-02"][1].title, "丙", "by_date_map 内容")
+
 os.remove(tmp)
 h.finish("store")

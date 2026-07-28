@@ -4,6 +4,9 @@ local hl = require("todo.ui.hl")
 
 local M = {}
 
+-- 上次渲染的位置信息（快速通道用）：pos[col][task_index] = { {lnum, cstart, cend}, ... }
+local last = nil
+
 local function col_width(win_w)
   return math.max(10, math.floor((win_w - 6) / 7)) -- 6 条列间竖线，无外框
 end
@@ -60,6 +63,7 @@ function M.render(ctx)
   local sel = ctx.state.week_sel
 
   local lines, spans = {}, {}
+  local pos = {}
   local function push_line(text, group)
     lines[#lines + 1] = text
     if group then
@@ -98,8 +102,9 @@ function M.render(ctx)
 
   -- 各列内容
   local cols = {}
+  local task_map = store.by_date_map()
   for i = 1, 7 do
-    cols[i] = col_rows(store.by_date(dates[i]), cw, max_rows)
+    cols[i] = col_rows(task_map[dates[i]] or {}, cw, max_rows)
   end
   for r = 1, max_rows do
     local parts, byte = {}, 0
@@ -117,6 +122,10 @@ function M.render(ctx)
       for _, seg in ipairs(cols[i][r]) do
         add(seg.text, seg.hl)
       end
+      pos[i] = pos[i] or {}
+      local ti = math.ceil(r / 2)
+      pos[i][ti] = pos[i][ti] or {}
+      table.insert(pos[i][ti], { lnum = lnum, cstart = cstart, cend = byte })
       if i == sel.col and (r == sel.row * 2 - 1 or r == sel.row * 2) then
         spans[#spans + 1] = { lnum, cstart, byte, "TodoCalCursor", 300 }
       end
@@ -125,6 +134,30 @@ function M.render(ctx)
   end
 
   hl.apply(ctx.buf, lines, spans)
+  last = { pos = pos }
+end
+
+-- 只移动选中高亮，不重写 buffer（hjkl 的快速通道）
+function M.move_cursor(ctx)
+  local api = vim.api
+  local sel = ctx.state.week_sel
+  if not (last and last.pos[sel.col] and last.pos[sel.col][sel.row]) then
+    ctx.refresh()
+    return
+  end
+  local marks = api.nvim_buf_get_extmarks(ctx.buf, hl.NS, 0, -1, { details = true })
+  for _, mk in ipairs(marks) do
+    if mk[4].hl_group == "TodoCalCursor" then
+      api.nvim_buf_del_extmark(ctx.buf, hl.NS, mk[1])
+    end
+  end
+  for _, p in ipairs(last.pos[sel.col][sel.row]) do
+    api.nvim_buf_set_extmark(ctx.buf, hl.NS, p.lnum, p.cstart, {
+      end_col = p.cend,
+      hl_group = "TodoCalCursor",
+      priority = 300,
+    })
+  end
 end
 
 local function selected_task(ctx)
@@ -150,10 +183,11 @@ function M.attach(ctx)
   local map = function(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = ctx.buf, nowait = true, silent = true })
   end
-  map("h", function() st.week_sel.col = st.week_sel.col - 1; clamp(ctx); ctx.refresh() end)
-  map("l", function() st.week_sel.col = st.week_sel.col + 1; clamp(ctx); ctx.refresh() end)
-  map("j", function() st.week_sel.row = st.week_sel.row + 1; clamp(ctx); ctx.refresh() end)
-  map("k", function() st.week_sel.row = st.week_sel.row - 1; clamp(ctx); ctx.refresh() end)
+  map("h", function() st.week_sel.col = st.week_sel.col - 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("l", function() st.week_sel.col = st.week_sel.col + 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("j", function() st.week_sel.row = st.week_sel.row + 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("k", function() st.week_sel.row = st.week_sel.row - 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("<Tab>", function() ctx.actions.focus_toggle() end)
   map("<", function() ctx.actions.shift_week(-1) end)
   map(">", function() ctx.actions.shift_week(1) end)
   map("t", function()

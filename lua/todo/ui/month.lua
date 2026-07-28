@@ -4,6 +4,9 @@ local hl = require("todo.ui.hl")
 
 local M = {}
 
+-- 上次渲染的布局信息（快速通道用）：pos[date] = { [r] = {lnum, cstart, cend} }
+local last = nil
+
 local MAX_CELL_H = 7 -- 1 日期行 + 5 任务行 + 1 溢出行
 
 -- 格高自适应：网格总行数 = 6*(1+cell_h)+1 <= win_h-2
@@ -36,7 +39,7 @@ local function task_segs(t, cw)
 end
 
 -- 一个日期格的 cell_h 行 segments
-local function cell_rows(date, cur_m, today, cw, cell_h)
+local function cell_rows(date, cur_m, today, cw, cell_h, tasks)
   local _, m, d = util.split_date(date)
   local num = (d == 1) and string.format("%d月%d日", m, d) or tostring(d)
   local label = " " .. num
@@ -48,7 +51,6 @@ local function cell_rows(date, cur_m, today, cw, cell_h)
   end
   local rows = { { { text = label, hl = date_hl }, { text = string.rep(" ", cw - util.strwidth(label)) } } }
 
-  local tasks = store.by_date(date)
   local n_task_rows = cell_h - 2
   for i = 1, n_task_rows do
     local t = tasks[i]
@@ -77,6 +79,7 @@ function M.render(ctx)
   local cursor = ctx.state.month_cursor
 
   local lines, spans = {}, {}
+  local pos = {}
   local function push_line(text, group)
     lines[#lines + 1] = text
     if group then
@@ -112,6 +115,7 @@ function M.render(ctx)
     end
   end
 
+  local task_map = store.by_date_map()
   for w = 0, 5 do
     if w == 0 then
       push_line(border("┌", "┬", "┐"), "TodoCalBorder")
@@ -120,7 +124,8 @@ function M.render(ctx)
     end
     local cells = {}
     for col = 1, 7 do
-      cells[col] = cell_rows(days[w * 7 + col], m, today, cw, cell_h)
+      local date = days[w * 7 + col]
+      cells[col] = cell_rows(date, m, today, cw, cell_h, task_map[date] or {})
     end
     for r = 1, cell_h do
       local parts, byte = {}, 0
@@ -138,6 +143,9 @@ function M.render(ctx)
         for _, seg in ipairs(cells[col][r]) do
           add(seg.text, seg.hl)
         end
+        local cell_date = days[w * 7 + col]
+        pos[cell_date] = pos[cell_date] or {}
+        pos[cell_date][r] = { lnum = lnum, cstart = cstart, cend = byte }
         if w == cur_week and col == cur_col then
           spans[#spans + 1] = { lnum, cstart, byte, "TodoCalCursor", 300 }
         end
@@ -149,6 +157,41 @@ function M.render(ctx)
   push_line(border("└", "┴", "┘"), "TodoCalBorder")
 
   hl.apply(ctx.buf, lines, spans)
+  last = { days = days, pos = pos }
+end
+
+-- 只移动光标高亮，不重写 buffer（同月内 hjkl 的快速通道）
+function M.move_cursor(ctx, date)
+  local api = vim.api
+  if not (last and last.pos[date]) then
+    ctx.refresh()
+    return
+  end
+  local marks = api.nvim_buf_get_extmarks(ctx.buf, hl.NS, 0, -1, { details = true })
+  for _, mk in ipairs(marks) do
+    if mk[4].hl_group == "TodoCalCursor" then
+      api.nvim_buf_del_extmark(ctx.buf, hl.NS, mk[1])
+    end
+  end
+  for _, p in ipairs(last.pos[date]) do
+    api.nvim_buf_set_extmark(ctx.buf, hl.NS, p.lnum, p.cstart, {
+      end_col = p.cend,
+      hl_group = "TodoCalCursor",
+      priority = 300,
+    })
+  end
+end
+
+local function move_day(ctx, delta)
+  local st = ctx.state
+  local oy, om = util.split_date(st.month_cursor)
+  st.month_cursor = util.add_days(st.month_cursor, delta)
+  local ny, nm = util.split_date(st.month_cursor)
+  if oy == ny and om == nm then
+    M.move_cursor(ctx, st.month_cursor)
+  else
+    ctx.refresh()
+  end
 end
 
 function M.attach(ctx)
@@ -156,10 +199,11 @@ function M.attach(ctx)
   local map = function(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = ctx.buf, nowait = true, silent = true })
   end
-  map("h", function() st.month_cursor = util.add_days(st.month_cursor, -1); ctx.refresh() end)
-  map("l", function() st.month_cursor = util.add_days(st.month_cursor, 1); ctx.refresh() end)
-  map("j", function() st.month_cursor = util.add_days(st.month_cursor, 7); ctx.refresh() end)
-  map("k", function() st.month_cursor = util.add_days(st.month_cursor, -7); ctx.refresh() end)
+  map("h", function() move_day(ctx, -1) end)
+  map("l", function() move_day(ctx, 1) end)
+  map("j", function() move_day(ctx, 7) end)
+  map("k", function() move_day(ctx, -7) end)
+  map("<Tab>", function() ctx.actions.focus_toggle() end)
   map("<", function() ctx.actions.shift_month(-1) end)
   map(">", function() ctx.actions.shift_month(1) end)
   map("t", function() st.month_cursor = util.today(); ctx.refresh() end)
