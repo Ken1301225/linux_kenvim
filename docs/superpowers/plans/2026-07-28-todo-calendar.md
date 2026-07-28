@@ -1794,6 +1794,10 @@ local fd = io.open(tmp, "w")
 fd:write("## 2026-07-15\n- [ ] 任务A @nlp !high\n- [x] 任务B\n\n## 2026-07-28\n- [ ] 任务C\n")
 fd:close()
 
+-- 无头环境默认 80x24 太窄，放大以获得真实布局
+vim.o.columns = 200
+vim.o.lines = 60
+
 local todo = require("todo")
 todo.setup({ file = tmp, categories = { nlp = { color = "#7aa2f7" } } })
 todo.open()
@@ -1820,7 +1824,7 @@ has("7月1日", "1 号显示月日格式")
 
 -- 切周视图
 todo.actions.show_week("2026-07-15")
-has("周三 15", "周视图列标题")
+has("星期三 15", "周视图列标题")
 has("任务A", "周视图显示任务")
 
 -- 周视图动作：toggle（单任务日期不弹选择器）
