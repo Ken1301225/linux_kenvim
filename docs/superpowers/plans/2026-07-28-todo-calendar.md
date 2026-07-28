@@ -862,7 +862,7 @@ return M
 ```lua
 local config = require("todo.config")
 local store = require("todo.store")
-local hl = require("todo.hl")
+local hl = require("todo.ui.hl")
 local util = require("todo.util")
 
 local M = {}
@@ -1147,7 +1147,7 @@ git commit -m "feat(todo): 配置/高亮/主模块骨架与浮窗"
 ```lua
 local util = require("todo.util")
 local store = require("todo.store")
-local hl = require("todo.hl")
+local hl = require("todo.ui.hl")
 
 local M = {}
 
@@ -1560,7 +1560,7 @@ git commit -m "feat(todo): 任务编辑浮动表单"
 ```lua
 local util = require("todo.util")
 local store = require("todo.store")
-local hl = require("todo.hl")
+local hl = require("todo.ui.hl")
 
 local M = {}
 
