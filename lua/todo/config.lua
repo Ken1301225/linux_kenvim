@@ -4,7 +4,7 @@ M.defaults = {
   file = "~/todo.md",
   categories = {},
   default_category = nil,
-  win = { width = 0.9, height = 0.85 },
+  win = { width = 0.9, height = 0.85, sidebar_width = 34 },
 }
 
 function M.merge(opts)

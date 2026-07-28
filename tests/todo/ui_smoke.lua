@@ -35,6 +35,51 @@ todo.state.month_cursor = "2026-07-15"
 todo.refresh()
 has("7月1日", "1 号显示月日格式")
 
+-- 侧边栏存在且 zindex=40
+h.eq(todo._side_win and vim.api.nvim_win_is_valid(todo._side_win), true, "侧边栏窗口存在")
+h.eq(vim.api.nvim_win_get_config(todo._side_win).zindex, 40, "侧边栏 zindex")
+h.eq(vim.api.nvim_win_get_config(todo._win).zindex, 40, "日历 zindex")
+
+local function side_joined()
+  return table.concat(vim.api.nvim_buf_get_lines(todo._side_buf, 0, -1, false), "\n")
+end
+-- 侧边栏只显示未完成：任务A/任务C 可见，任务B(done) 不可见
+h.eq(side_joined():find("任务A", 1, true) ~= nil, true, "侧边栏显示任务A")
+h.eq(side_joined():find("任务C", 1, true) ~= nil, true, "侧边栏显示任务C")
+h.eq(side_joined():find("任务B", 1, true) == nil, true, "侧边栏不显示已完成")
+h.eq(side_joined():find("2026-07-15", 1, true) ~= nil, true, "侧边栏日期头")
+
+-- 快速通道：月视图 h 移动后 buffer 文本不变
+local before = joined()
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._buf, "n")) do
+  if mp.lhs == "h" then mp.callback() end
+end
+h.eq(todo.state.month_cursor, "2026-07-14", "h 移动光标")
+h.eq(joined() == before, true, "快速通道不重写 buffer")
+todo.state.month_cursor = "2026-07-15"
+todo.refresh()
+
+-- Tab 焦点切换
+todo.actions.focus_toggle()
+h.eq(todo.state.focus, "sidebar", "Tab 切到侧边栏")
+h.eq(vim.api.nvim_get_current_win(), todo._side_win, "当前窗口为侧边栏")
+
+-- 侧边栏 j 移动 + <CR> 跳转（任务A -> 任务C）
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._side_buf, "n")) do
+  if mp.lhs == "j" then mp.callback() end
+end
+h.eq(todo.state.side_sel_id, "2026-07-28-1", "j 选中任务C")
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._side_buf, "n")) do
+  if mp.lhs == "<CR>" then mp.callback() end
+end
+h.eq(todo.state.month_cursor, "2026-07-28", "<CR> 跳转日历到任务日期")
+h.eq(todo.state.focus, "sidebar", "跳转后焦点留在侧边栏")
+
+todo.actions.focus_toggle()
+h.eq(todo.state.focus, "calendar", "Tab 切回日历")
+todo.state.month_cursor = "2026-07-15"
+todo.refresh()
+
 -- 切周视图
 todo.actions.show_week("2026-07-15")
 has("星期三 15", "周视图列标题")
