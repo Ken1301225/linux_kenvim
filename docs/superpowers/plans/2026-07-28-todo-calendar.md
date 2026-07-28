@@ -1895,3 +1895,739 @@ git commit -m "feat(todo): UI 冒烟测试 + 接入用户配置（:Todo / <leade
 ```
 
 ---
+
+### Task 9: 浮窗 zindex 修复（notify 被遮挡）
+
+**Files:**
+- Modify: `~/.config/nvim/lua/todo/init.lua`（open 的 win config 加 `zindex = 40`）
+- Modify: `~/.config/nvim/lua/todo/ui/form.lua`（open_win config 加 `zindex = 50`）
+
+**Interfaces:**
+- Produces: 日历浮窗 `nvim_win_get_config(win).zindex == 40`；表单浮窗 `== 50`
+
+- [ ] **Step 1: init.lua 日历浮窗加 zindex**
+
+`nvim_open_win` 配置表中 `title_pos = "center",` 之后加一行：
+
+```lua
+    zindex = 40,
+```
+
+- [ ] **Step 2: form.lua 表单浮窗显式 zindex**
+
+`nvim_open_win` 配置表中 `title_pos = "center",` 之后加一行：
+
+```lua
+    zindex = 50,
+```
+
+- [ ] **Step 3: 验证**
+
+```bash
+nvim --clean -l /dev/stdin <<'EOF'
+package.path = "/home/ken/.config/nvim/lua/?.lua;/home/ken/.config/nvim/lua/?/init.lua;" .. package.path
+local todo = require("todo")
+todo.setup({ categories = {} })
+todo.open()
+assert(vim.api.nvim_win_get_config(todo._win).zindex == 40, "日历 zindex=40")
+print("zindex OK")
+os.exit(0)
+EOF
+```
+
+Expected: 输出 `zindex OK`
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd ~/.config/nvim
+git add lua/todo/init.lua lua/todo/ui/form.lua
+git commit -m "fix(todo): 降低日历浮窗 zindex，修复 nvim-notify 弹窗被遮挡"
+```
+
+---
+
+### Task 10: 性能优化（快速通道 + 渲染索引 + 键位一次注册）
+
+**Files:**
+- Modify: `~/.config/nvim/lua/todo/store.lua`（加 `by_date_map`）
+- Test: `~/.config/nvim/tests/todo/store_spec.lua`（加 2 断言）
+- Modify: `~/.config/nvim/lua/todo/init.lua`（attach/render 分离）
+- Modify: `~/.config/nvim/lua/todo/ui/month.lua`（快速通道 + 位置记录）
+- Modify: `~/.config/nvim/lua/todo/ui/week.lua`（快速通道 + 位置记录）
+
+**Interfaces:**
+- Produces:
+  - `store.by_date_map() -> { [date] = {task,...} }`（一遍构建，任务保持文件顺序）
+  - `M._attached`（init 内记录当前已 attach 的视图名；`open()` 时重置为 nil）
+  - refresh 行为：视图不变只调用 `view.render(ctx)`；视图变化才 `view.attach(ctx)`
+  - month/week 的 `h/j/k/l`：光标未越出当前网格时仅移动 `TodoCalCursor` extmark（buffer 文本不变）；否则 `ctx.refresh()`
+
+- [ ] **Step 1: store.lua 加 by_date_map + 测试**
+
+store.lua 末尾（`return M` 前）加：
+
+```lua
+-- 一遍构建 date -> tasks 映射（渲染用，任务保持文件顺序）
+function M.by_date_map()
+  local map = {}
+  for _, t in ipairs(M.tasks) do
+    if not map[t.date] then map[t.date] = {} end
+    map[t.date][#map[t.date] + 1] = t
+  end
+  return map
+end
+```
+
+store_spec.lua 在 `os.remove(tmp)` 前加：
+
+```lua
+-- by_date_map
+store.add({ title = "甲", date = "2026-07-01", priority = "medium", done = false, notes = "" })
+store.add({ title = "乙", date = "2026-07-01", priority = "medium", done = false, notes = "" })
+store.add({ title = "丙", date = "2026-07-02", priority = "medium", done = false, notes = "" })
+local dm = store.by_date_map()
+h.eq(#dm["2026-07-01"], 2, "by_date_map 同日两个")
+h.eq(dm["2026-07-02"][1].title, "丙", "by_date_map 内容")
+```
+
+Run: `cd ~/.config/nvim && nvim --clean -l tests/todo/store_spec.lua && echo "exit=$?"`
+Expected: `store: 18 passed, 0 failed`，`exit=0`
+
+- [ ] **Step 2: init.lua 拆分 attach/render**
+
+`M.open()` 中 `M.refresh()` 之前加一行：
+
+```lua
+  M._attached = nil
+```
+
+`M.refresh()` 整体替换为：
+
+```lua
+function M.refresh()
+  if not (M._win and vim.api.nvim_win_is_valid(M._win)) then return end
+  local view = require("todo.ui." .. M.state.view)
+  local ctx = {
+    buf = M._buf,
+    win = M._win,
+    side_buf = M._side_buf,
+    side_win = M._side_win,
+    cfg = M.cfg,
+    state = M.state,
+    refresh = M.refresh,
+    actions = M.actions,
+  }
+  if M._attached ~= M.state.view then
+    view.attach(ctx)
+    M._attached = M.state.view
+  else
+    view.render(ctx)
+  end
+  local ok, sidebar = pcall(require, "todo.ui.sidebar")
+  if ok then
+    sidebar.render(ctx)
+  end
+end
+```
+
+（`side_buf`/`side_win` 与 sidebar 模块在 Task 11 才就位；此处 `pcall` 保证 Task 10 单独成立。）
+
+- [ ] **Step 3: month.lua 快速通道**
+
+文件头部 `local M = {}` 之后加：
+
+```lua
+-- 上次渲染的布局信息（快速通道用）：pos[date] = { {lnum, cstart, cend}, ... }（每行一条）
+local last = nil
+```
+
+`M.render(ctx)` 中做三处改动：
+
+1. `local days = util.month_grid(y, m)` 之后，把 `local tasks = store.by_date(date)` 的逐格调用替换为渲染级索引——`cell_rows` 签名改为 `cell_rows(date, cur_m, today, cw, cell_h, tasks)`，函数体内删除 `local tasks = store.by_date(date)` 一行；render 中调用处改为：
+
+```lua
+    local task_map = store.by_date_map()
+    for col = 1, 7 do
+      local date = days[w * 7 + col]
+      cells[col] = cell_rows(date, m, today, cw, cell_h, task_map[date] or {})
+    end
+```
+
+2. render 开头（`local lines, spans = {}, {}` 之后）初始化位置表：
+
+```lua
+  local pos = {}
+```
+
+3. 内容行组合循环里，记录每个格每行的字节范围（在 `if w == cur_week and col == cur_col` 块之前加）：
+
+```lua
+        local cell_date = days[w * 7 + col]
+        pos[cell_date] = pos[cell_date] or {}
+        pos[cell_date][r] = { lnum = lnum, cstart = cstart, cend = byte }
+```
+
+4. render 末尾（`hl.apply(...)` 之后）保存布局：
+
+```lua
+  last = { days = days, pos = pos }
+```
+
+文件末尾（`M.attach` 之前）加快速通道函数：
+
+```lua
+-- 只移动光标高亮，不重写 buffer（同月内 hjkl 的快速通道）
+function M.move_cursor(ctx, date)
+  local api = vim.api
+  if not (last and last.pos[date]) then
+    ctx.refresh()
+    return
+  end
+  local marks = api.nvim_buf_get_extmarks(ctx.buf, hl.NS, 0, -1, { details = true })
+  for _, mk in ipairs(marks) do
+    if mk[4].hl_group == "TodoCalCursor" then
+      api.nvim_buf_del_extmark(ctx.buf, hl.NS, mk[1])
+    end
+  end
+  for _, p in ipairs(last.pos[date]) do
+    api.nvim_buf_set_extmark(ctx.buf, hl.NS, p.lnum, p.cstart, {
+      end_col = p.cend,
+      hl_group = "TodoCalCursor",
+      priority = 300,
+    })
+  end
+end
+
+local function move_day(ctx, delta)
+  local st = ctx.state
+  local oy, om = util.split_date(st.month_cursor)
+  st.month_cursor = util.add_days(st.month_cursor, delta)
+  local ny, nm = util.split_date(st.month_cursor)
+  if oy == ny and om == nm then
+    M.move_cursor(ctx, st.month_cursor)
+  else
+    ctx.refresh()
+  end
+end
+```
+
+`M.attach` 中 h/l/j/k 四个映射改为：
+
+```lua
+  map("h", function() move_day(ctx, -1) end)
+  map("l", function() move_day(ctx, 1) end)
+  map("j", function() move_day(ctx, 7) end)
+  map("k", function() move_day(ctx, -7) end)
+```
+
+并新增 Tab 映射（Task 11 使用，先就位无害）：
+
+```lua
+  map("<Tab>", function() ctx.actions.focus_toggle() end)
+```
+
+- [ ] **Step 4: week.lua 快速通道**
+
+同 month 的模式：
+
+1. `local M = {}` 后加 `local last = nil`
+2. `col_rows(tasks, cw, max_rows)` 签名不变，但 render 中 `cols[i] = col_rows(store.by_date(dates[i]), cw, max_rows)` 改为先 `local task_map = store.by_date_map()`，再 `cols[i] = col_rows(task_map[dates[i]] or {}, cw, max_rows)`
+3. render 内容行组合循环中，在选中高亮块之前加：
+
+```lua
+      pos[i] = pos[i] or {}
+      local ti = math.ceil(r / 2)
+      pos[i][ti] = pos[i][ti] or {}
+      table.insert(pos[i][ti], { lnum = lnum, cstart = cstart, cend = byte })
+```
+
+（render 开头 `local lines, spans = {}, {}` 后加 `local pos = {}`；末尾 `hl.apply` 后加 `last = { pos = pos }`）
+
+4. 文件末尾（`M.attach` 之前）加：
+
+```lua
+function M.move_cursor(ctx)
+  local api = vim.api
+  local sel = ctx.state.week_sel
+  if not (last and last.pos[sel.col] and last.pos[sel.col][sel.row]) then
+    ctx.refresh()
+    return
+  end
+  local marks = api.nvim_buf_get_extmarks(ctx.buf, hl.NS, 0, -1, { details = true })
+  for _, mk in ipairs(marks) do
+    if mk[4].hl_group == "TodoCalCursor" then
+      api.nvim_buf_del_extmark(ctx.buf, hl.NS, mk[1])
+    end
+  end
+  for _, p in ipairs(last.pos[sel.col][sel.row]) do
+    api.nvim_buf_set_extmark(ctx.buf, hl.NS, p.lnum, p.cstart, {
+      end_col = p.cend,
+      hl_group = "TodoCalCursor",
+      priority = 300,
+    })
+  end
+end
+```
+
+5. `M.attach` 中 h/l/j/k 改为快速通道 + Tab：
+
+```lua
+  map("h", function() st.week_sel.col = st.week_sel.col - 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("l", function() st.week_sel.col = st.week_sel.col + 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("j", function() st.week_sel.row = st.week_sel.row + 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("k", function() st.week_sel.row = st.week_sel.row - 1; clamp(ctx); M.move_cursor(ctx) end)
+  map("<Tab>", function() ctx.actions.focus_toggle() end)
+```
+
+（注意 `move_cursor` 需在 attach 之前定义；`clamp`/`selected_task` 保持原位在 attach 前。）
+
+- [ ] **Step 5: 验证**
+
+```bash
+cd ~/.config/nvim
+nvim --clean -l tests/todo/util_spec.lua
+nvim --clean -l tests/todo/parser_spec.lua
+nvim --clean -l tests/todo/store_spec.lua
+nvim --clean -l tests/todo/ui_smoke.lua
+```
+
+Expected: 全部 `0 failed`。再跑快速通道专项检查：
+
+```bash
+nvim --clean -l /dev/stdin <<'EOF'
+package.path = "/home/ken/.config/nvim/lua/?.lua;/home/ken/.config/nvim/lua/?/init.lua;" .. package.path
+vim.o.columns = 200; vim.o.lines = 60
+local fd = io.open("/tmp/todo_fast.md", "w")
+fd:write("## 2026-07-15\n- [ ] 任务A @nlp\n")
+fd:close()
+local todo = require("todo")
+todo.setup({ file = "/tmp/todo_fast.md", categories = { nlp = { color = "#7aa2f7" } } })
+todo.open()
+todo.state.month_cursor = "2026-07-15"
+todo.refresh()
+local before = table.concat(vim.api.nvim_buf_get_lines(todo._buf, 0, -1, false), "\n")
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._buf, "n")) do
+  if mp.lhs == "h" then mp.callback() end
+end
+assert(todo.state.month_cursor == "2026-07-14", "h 移动")
+local after = table.concat(vim.api.nvim_buf_get_lines(todo._buf, 0, -1, false), "\n")
+assert(before == after, "快速通道不重写 buffer")
+local hl = require("todo.ui.hl")
+local n = 0
+for _, mk in ipairs(vim.api.nvim_buf_get_extmarks(todo._buf, hl.NS, 0, -1, { details = true })) do
+  if mk[4].hl_group == "TodoCalCursor" then n = n + 1 end
+end
+assert(n > 0, "光标高亮仍存在")
+-- 跨月回退到全量渲染
+todo.state.month_cursor = "2026-07-01"
+todo.refresh()
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._buf, "n")) do
+  if mp.lhs == "h" then mp.callback() end
+end
+assert(todo.state.month_cursor == "2026-06-30", "跨月移动")
+local joined = table.concat(vim.api.nvim_buf_get_lines(todo._buf, 0, -1, false), "\n")
+assert(joined:find("2026 年 6 月", 1, true), "跨月触发全量渲染")
+print("fast path OK")
+os.exit(0)
+EOF
+```
+
+Expected: `fast path OK`
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd ~/.config/nvim
+git add lua/todo/store.lua tests/todo/store_spec.lua lua/todo/init.lua lua/todo/ui/month.lua lua/todo/ui/week.lua
+git commit -m "perf(todo): 光标快速通道 + 渲染索引 + 键位一次注册"
+```
+
+---
+
+### Task 11: 侧边栏（未完成任务列表 + 交互）
+
+**Files:**
+- Create: `~/.config/nvim/lua/todo/ui/sidebar.lua`
+- Modify: `~/.config/nvim/lua/todo/init.lua`（双浮窗布局 / focus / Tab / jump_to_date / close 两窗）
+- Modify: `~/.config/nvim/lua/todo/config.lua`（默认 `win.sidebar_width = 34`）
+- Test: `~/.config/nvim/tests/todo/ui_smoke.lua`（加侧边栏断言）
+
+**Interfaces:**
+- Consumes: `store.tasks`、`hl.*`、`util.*`、ctx（含 `side_buf/side_win`）
+- Produces:
+  - `sidebar.attach(ctx)`（打开时一次，注册侧边栏键位）/ `sidebar.render(ctx)`（每次刷新）
+  - `state.focus = "calendar"|"sidebar"`；`state.side_sel_id = 任务id|nil`
+  - `actions.focus_toggle()`、`actions.jump_to_date(date)`
+  - `todo._side_buf` / `todo._side_win`；`nvim_win_get_config(_side_win).zindex == 40`
+  - 配置：`cfg.win.sidebar_width`（默认 34）
+
+- [ ] **Step 1: config.lua 默认值**
+
+`M.defaults.win` 改为：
+
+```lua
+  win = { width = 0.9, height = 0.85, sidebar_width = 34 },
+```
+
+- [ ] **Step 2: 实现 sidebar.lua**
+
+```lua
+local util = require("todo.util")
+local store = require("todo.store")
+local hl = require("todo.ui.hl")
+
+local M = {}
+
+-- 上次渲染的任务行映射：task_lnums = {lnum,...}（0 基行号），id_at[lnum] = 任务id
+local task_lnums, id_at = {}, {}
+
+-- 构建展示项：{{type="date", date=...}, {type="task", task=...}, ...}（仅未完成，日期升序）
+local function build_items()
+  local by_date, order = {}, {}
+  for _, t in ipairs(store.tasks) do
+    if not t.done then
+      if not by_date[t.date] then
+        by_date[t.date] = {}
+        order[#order + 1] = t.date
+      end
+      by_date[t.date][#by_date[t.date] + 1] = t
+    end
+  end
+  table.sort(order)
+  local items = {}
+  for _, d in ipairs(order) do
+    items[#items + 1] = { type = "date", date = d }
+    for _, t in ipairs(by_date[d]) do
+      items[#items + 1] = { type = "task", task = t }
+    end
+  end
+  return items
+end
+
+function M.render(ctx)
+  if not (ctx.side_win and vim.api.nvim_win_is_valid(ctx.side_win)) then return end
+  local width = vim.api.nvim_win_get_width(ctx.side_win)
+  local today = util.today()
+  local items = build_items()
+  local lines, spans = {}, {}
+  task_lnums, id_at = {}, {}
+
+  if #items == 0 then
+    lines[1] = " 没有未完成的任务"
+    spans[1] = { 0, 0, #lines[1], "TodoCalOtherMonth" }
+  else
+    for _, it in ipairs(items) do
+      if it.type == "date" then
+        local label = string.format(" %s %s", it.date, util.dow_names[util.weekday(it.date)])
+        local group
+        if it.date == today then
+          group = "TodoCalToday"
+        elseif it.date < today then
+          group = "TodoCalPriHigh"
+        else
+          group = "TodoCalHeader"
+        end
+        lines[#lines + 1] = label
+        spans[#spans + 1] = { #lines - 1, 0, #label, group }
+      else
+        local t = it.task
+        local bullet = " ● "
+        local marks = hl.pri_marks(t.priority)
+        local title = util.truncate(t.title, width - util.strwidth(bullet) - util.strwidth(marks))
+        local parts, byte = {}, 0
+        local lnum = #lines
+        local function add(text, group)
+          parts[#parts + 1] = text
+          if group then
+            spans[#spans + 1] = { lnum, byte, byte + #text, group }
+          end
+          byte = byte + #text
+        end
+        add(bullet, hl.cat(t.category))
+        add(title)
+        add(marks, hl.pri_hl(t.priority))
+        lines[#lines + 1] = table.concat(parts)
+        task_lnums[#task_lnums + 1] = lnum
+        id_at[lnum] = t.id
+      end
+    end
+  end
+
+  -- 选中恢复：按 id 找行；找不到回退到第一个任务
+  local sel_lnum
+  if ctx.state.side_sel_id then
+    for _, ln in ipairs(task_lnums) do
+      if id_at[ln] == ctx.state.side_sel_id then
+        sel_lnum = ln
+        break
+      end
+    end
+  end
+  if not sel_lnum and #task_lnums > 0 then
+    sel_lnum = task_lnums[1]
+    ctx.state.side_sel_id = id_at[sel_lnum]
+  end
+  if sel_lnum then
+    spans[#spans + 1] = { sel_lnum, 0, #lines[sel_lnum + 1], "TodoCalCursor", 300 }
+  end
+
+  M._task_lnums = task_lnums
+  M._id_at = id_at
+  hl.apply(ctx.side_buf, lines, spans)
+end
+
+local function selected_task(ctx)
+  local id = ctx.state.side_sel_id
+  if id then
+    return store.find(id)
+  end
+  return nil
+end
+
+local function move_sel(ctx, delta)
+  local lnums = M._task_lnums or {}
+  if #lnums == 0 then return end
+  local i = 1
+  for idx, ln in ipairs(lnums) do
+    if M._id_at[ln] == ctx.state.side_sel_id then
+      i = idx
+      break
+    end
+  end
+  i = math.max(1, math.min(#lnums, i + delta))
+  ctx.state.side_sel_id = M._id_at[lnums[i]]
+  ctx.refresh()
+end
+
+function M.attach(ctx)
+  local map = function(lhs, fn)
+    vim.keymap.set("n", lhs, fn, { buffer = ctx.side_buf, nowait = true, silent = true })
+  end
+  map("j", function() move_sel(ctx, 1) end)
+  map("k", function() move_sel(ctx, -1) end)
+  map("<CR>", function()
+    local t = selected_task(ctx)
+    if t then ctx.actions.jump_to_date(t.date) end
+  end)
+  map("a", function()
+    local t = selected_task(ctx)
+    ctx.actions.add(t and t.date or util.today())
+  end)
+  map("e", function() local t = selected_task(ctx); if t then ctx.actions.edit_task(t) end end)
+  map("x", function() local t = selected_task(ctx); if t then ctx.actions.toggle_task(t) end end)
+  map("d", function() local t = selected_task(ctx); if t then ctx.actions.remove_task(t) end end)
+  map("m", function() local t = selected_task(ctx); if t then ctx.actions.move_task(t) end end)
+  map("<Tab>", function() ctx.actions.focus_toggle() end)
+  map("q", function() ctx.actions.close() end)
+  map("<Esc>", function() ctx.actions.close() end)
+end
+
+return M
+```
+
+- [ ] **Step 3: init.lua 双浮窗布局**
+
+1. `M.open()` 整体替换为：
+
+```lua
+local function ensure_bufs()
+  if not (M._buf and vim.api.nvim_buf_is_valid(M._buf)) then
+    M._buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[M._buf].bufhidden = "hide"
+    vim.bo[M._buf].filetype = "todocal"
+  end
+  if not (M._side_buf and vim.api.nvim_buf_is_valid(M._side_buf)) then
+    M._side_buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[M._side_buf].bufhidden = "hide"
+    vim.bo[M._side_buf].filetype = "todoside"
+  end
+end
+
+function M.open()
+  if M._win and vim.api.nvim_win_is_valid(M._win) then return end
+  store.load()
+  if not M.state then
+    local today = util.today()
+    M.state = {
+      view = "month",
+      month_cursor = today,
+      week_base = today,
+      week_sel = { col = util.weekday(today), row = 1 },
+      focus = "calendar",
+      side_sel_id = nil,
+    }
+  end
+  ensure_bufs()
+  local total_w = math.floor(vim.o.columns * M.cfg.win.width)
+  local total_h = math.floor(vim.o.lines * M.cfg.win.height)
+  local side_w = math.min(M.cfg.win.sidebar_width, math.floor(total_w / 2))
+  local cal_w = total_w - side_w - 1
+  local row = math.floor((vim.o.lines - total_h) / 2)
+  local col = math.floor((vim.o.columns - total_w) / 2)
+  M._side_win = vim.api.nvim_open_win(M._side_buf, false, {
+    relative = "editor",
+    width = side_w,
+    height = total_h,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = " 任务 ",
+    title_pos = "center",
+    zindex = 40,
+  })
+  vim.wo[M._side_win].wrap = false
+  M._win = vim.api.nvim_open_win(M._buf, true, {
+    relative = "editor",
+    width = cal_w,
+    height = total_h,
+    row = row,
+    col = col + side_w + 1,
+    style = "minimal",
+    border = "rounded",
+    title = " TODO ",
+    title_pos = "center",
+    zindex = 40,
+  })
+  vim.wo[M._win].wrap = false
+  M.state.focus = "calendar"
+  M._attached = nil
+  require("todo.ui.sidebar").attach({
+    buf = M._buf,
+    win = M._win,
+    side_buf = M._side_buf,
+    side_win = M._side_win,
+    cfg = M.cfg,
+    state = M.state,
+    refresh = M.refresh,
+    actions = M.actions,
+  })
+  M.refresh()
+end
+```
+
+（删除旧的 `ensure_buf` 函数；`M.state.focus = "calendar"` 每次打开都重置。）
+
+2. `M.close()` 整体替换为：
+
+```lua
+function M.close()
+  if M._win and vim.api.nvim_win_is_valid(M._win) then
+    vim.api.nvim_win_close(M._win, true)
+  end
+  M._win = nil
+  if M._side_win and vim.api.nvim_win_is_valid(M._side_win) then
+    vim.api.nvim_win_close(M._side_win, true)
+  end
+  M._side_win = nil
+end
+```
+
+3. `M.refresh()` 中的 sidebar 调用去掉 pcall（模块已存在）：
+
+```lua
+  require("todo.ui.sidebar").render(ctx)
+```
+
+4. actions 新增：
+
+```lua
+function M.actions.focus_toggle()
+  if M.state.focus == "sidebar" then
+    M.state.focus = "calendar"
+    if M._win and vim.api.nvim_win_is_valid(M._win) then
+      vim.api.nvim_set_current_win(M._win)
+    end
+  else
+    M.state.focus = "sidebar"
+    if M._side_win and vim.api.nvim_win_is_valid(M._side_win) then
+      vim.api.nvim_set_current_win(M._side_win)
+    end
+  end
+end
+
+function M.actions.jump_to_date(date)
+  if M.state.view == "week" then
+    M.state.week_base = date
+    M.state.week_sel = { col = util.weekday(date), row = 1 }
+  else
+    M.state.month_cursor = date
+  end
+  M.refresh()
+end
+```
+
+- [ ] **Step 4: ui_smoke.lua 追加侧边栏断言**
+
+在 `-- 切周视图` 之前插入（此时任务A/任务C 未完成、任务B 已完成，且处于月视图）：
+
+```lua
+-- 侧边栏存在且 zindex=40
+h.eq(todo._side_win and vim.api.nvim_win_is_valid(todo._side_win), true, "侧边栏窗口存在")
+h.eq(vim.api.nvim_win_get_config(todo._side_win).zindex, 40, "侧边栏 zindex")
+h.eq(vim.api.nvim_win_get_config(todo._win).zindex, 40, "日历 zindex")
+
+local function side_joined()
+  return table.concat(vim.api.nvim_buf_get_lines(todo._side_buf, 0, -1, false), "\n")
+end
+-- 侧边栏只显示未完成：任务A/任务C 可见，任务B(done) 不可见
+h.eq(side_joined():find("任务A", 1, true) ~= nil, true, "侧边栏显示任务A")
+h.eq(side_joined():find("任务C", 1, true) ~= nil, true, "侧边栏显示任务C")
+h.eq(side_joined():find("任务B", 1, true) == nil, true, "侧边栏不显示已完成")
+h.eq(side_joined():find("2026-07-15", 1, true) ~= nil, true, "侧边栏日期头")
+
+-- 快速通道：月视图 h 移动后 buffer 文本不变
+local before = joined()
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._buf, "n")) do
+  if mp.lhs == "h" then mp.callback() end
+end
+h.eq(todo.state.month_cursor, "2026-07-14", "h 移动光标")
+h.eq(joined() == before, true, "快速通道不重写 buffer")
+todo.state.month_cursor = "2026-07-15"
+todo.refresh()
+
+-- Tab 焦点切换
+todo.actions.focus_toggle()
+h.eq(todo.state.focus, "sidebar", "Tab 切到侧边栏")
+h.eq(vim.api.nvim_get_current_win(), todo._side_win, "当前窗口为侧边栏")
+
+-- 侧边栏 j 移动 + <CR> 跳转（任务A -> 任务C）
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._side_buf, "n")) do
+  if mp.lhs == "j" then mp.callback() end
+end
+h.eq(todo.state.side_sel_id, "2026-07-28-1", "j 选中任务C")
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._side_buf, "n")) do
+  if mp.lhs == "<CR>" then mp.callback() end
+end
+h.eq(todo.state.month_cursor, "2026-07-28", "<CR> 跳转日历到任务日期")
+h.eq(todo.state.focus, "sidebar", "跳转后焦点留在侧边栏")
+
+todo.actions.focus_toggle()
+h.eq(todo.state.focus, "calendar", "Tab 切回日历")
+todo.state.month_cursor = "2026-07-15"
+todo.refresh()
+```
+
+注意：插入位置在 toggle 2026-07-28 步骤**之前**（否则任务C 已完成，断言不成立）。
+
+- [ ] **Step 5: 全量回归**
+
+Run: `cd ~/.config/nvim && for f in tests/todo/*.lua; do nvim --clean -l "$f" || echo "FAILED: $f"; done; echo "exit=$?"`
+Expected: 全部 `0 failed`，无 FAILED。
+
+- [ ] **Step 6: 真实配置检查 + Commit**
+
+```bash
+timeout 60 nvim --headless '+lua vim.defer_fn(function() local ok, err = pcall(vim.cmd, "Todo") print("Todo:", ok, err) vim.cmd("qa!") end, 3000)' 2>&1 | tail -3
+```
+
+Expected: `Todo: true nil`（随后手动打开确认双浮窗布局与 Tab 切换）
+
+```bash
+cd ~/.config/nvim
+git add lua/todo/ui/sidebar.lua lua/todo/init.lua lua/todo/config.lua tests/todo/ui_smoke.lua
+git commit -m "feat(todo): 未完成任务侧边栏 + 浮窗层级修复 + 性能优化验证"
+```
+
+---

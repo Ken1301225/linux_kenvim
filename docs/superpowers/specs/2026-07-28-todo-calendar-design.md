@@ -160,3 +160,27 @@ notes:
 - `parser.lua`、`util.lua` 纯函数测试：`nvim -l tests/todo/parser_spec.lua` 无头运行，自写简易断言（失败打印并退出码非 0）
 - 覆盖：空文件、单任务全字段、多任务多日期、备注多行、往返一致（parse→serialize→parse 等价）、非法行容错、中文宽度截断、月末/闰年日期计算
 - UI 层手动验证（打开/切换/增删改/移动/重启加载）
+
+---
+
+## 附录 A（2026-07-29）：notify 层级修复 / 性能优化 / 侧边栏
+
+### A.1 浮窗 zindex（bug 修复）
+
+- 背景：nvim-notify 弹窗不显式设置 zindex（默认 50），与日历浮窗同值时被按创建顺序压在下方，导致 todo 打开期间通知不可见
+- 日历浮窗与侧边栏浮窗 `zindex = 40`；表单浮窗显式 `zindex = 50`（同时保证表单始终在日历之上）
+
+### A.2 性能优化
+
+- **渲染与键位分离**：`view.attach(ctx)`（注册键位）仅在打开/切换视图时执行；`view.render(ctx)` 每次刷新执行
+- **光标快速通道**：月/周视图中 `h/j/k/l` 未越出当前网格范围时，只删除并重建光标高亮 extmark（约 14 次 API 调用），不重写 buffer 文本；跨月/翻页/数据变化仍走全量渲染
+- **渲染索引**：`store.by_date_map()` 每次渲染一次性构建 `date→tasks` 映射，取代逐格 `by_date` 的 O(42N) 查询
+
+### A.3 侧边栏
+
+- 新模块 `lua/todo/ui/sidebar.lua`；打开时与日历同时出现，左栏右历，两个等高血压浮窗；总宽仍由 `win.width` 决定，栏宽 `win.sidebar_width`（默认 34）
+- 内容：仅未完成任务，按日期升序分组（过期任务在最前）；日期头格式 ` YYYY-MM-DD 星期X`，过期 `TodoCalPriHigh`、今天 `TodoCalToday`、其余 `TodoCalHeader`；任务行 = 分类色 `●` + 标题 + 优先级标记；空态显示灰色 ` 没有未完成的任务`
+- `state.focus = "calendar"|"sidebar"`；`Tab` 在两窗间切换焦点；`q`/`<Esc>` 在任一窗口关闭整个界面
+- 侧边栏键位：`j/k` 任务间移动（选中行整行反色）；`<CR>` 日历光标跳到该任务日期（焦点留在侧边栏）；`a/e/x/d/m` 语义同日历（`x` 完成后任务即从栏中消失）；`a` 使用选中任务日期（无选中则今天）
+- `state.side_sel_id` 记录选中任务 id，渲染时按 id 恢复选中，id 消失则回退到首个任务
+- 动作复用 `actions.edit_task/toggle_task/remove_task/move_task`；新增 `actions.jump_to_date(date)` 与 `actions.focus_toggle()`
