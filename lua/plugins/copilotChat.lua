@@ -28,14 +28,6 @@ return {
 			model = "claude-sonnet-4",
 
 			system_prompt = "请用中文回复所有问题。",
-			vim.api.nvim_create_autocmd("BufEnter", {
-				pattern = "copilot-*",
-				callback = function()
-					vim.opt_local.relativenumber = false
-					vim.opt_local.number = false
-					vim.opt_local.conceallevel = 0
-				end,
-			}),
 		},
 		keys = {
 			-- 你可以在这里自定义快捷键

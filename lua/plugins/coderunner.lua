@@ -17,7 +17,7 @@ return {
 				"$dir/$fileNameWithoutExt",
 			},
 			c = function(...)
-				c_base = {
+				local c_base = {
 					"cd $dir &&",
 					"gcc $fileName -o",
 					"/tmp/$fileNameWithoutExt",
@@ -27,13 +27,16 @@ return {
 					"rm /tmp/$fileNameWithoutExt",
 				}
 				vim.ui.input({ prompt = "Add more args:" }, function(input)
+					if input == nil then
+						return
+					end
 					c_base[4] = input
 					vim.print(vim.tbl_extend("force", c_base, c_exec))
 					require("code_runner.commands").run_from_fn(vim.list_extend(c_base, c_exec))
 				end)
 			end,
 			cpp = function(...)
-				cpp_base = {
+				local cpp_base = {
 					"cd $dir &&",
 					"g++ $fileName -o",
 					"/tmp/$fileNameWithoutExt",
@@ -43,6 +46,9 @@ return {
 					"rm /tmp/$fileNameWithoutExt",
 				}
 				vim.ui.input({ prompt = "Add more args:" }, function(input)
+					if input == nil then
+						return
+					end
 					cpp_base[4] = input
 					vim.print(vim.tbl_extend("force", cpp_base, cpp_exec))
 					require("code_runner.commands").run_from_fn(vim.list_extend(cpp_base, cpp_exec))
