@@ -59,6 +59,7 @@ function M.open()
     border = "rounded",
     title = " TODO ",
     title_pos = "center",
+    zindex = 40,
   })
   vim.wo[M._win].wrap = false
   M.refresh()

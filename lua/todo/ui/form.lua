@@ -93,6 +93,7 @@ function M.open(task, cfg, on_save)
     style = "minimal",
     title = " 任务（<CR> 保存，q 取消） ",
     title_pos = "center",
+    zindex = 50,
   })
   vim.wo[win].wrap = false
   vim.api.nvim_win_set_cursor(win, { 1, 7 })
