@@ -37,7 +37,7 @@ vim.ui.input = original_input
 package.loaded["code_runner.commands"] = nil
 
 local trouble_source = table.concat(vim.fn.readfile("lua/plugins/trouble.lua"), "\n")
-eq(trouble_source:find("use_diagnostic_signs%s*=%s*true") ~= nil, true, "Trouble supported sign option")
+eq(trouble_source:find("use_diagnostic_signs") == nil, true, "Trouble removed legacy sign option")
 eq(trouble_source:find("use_lsp_diagnostic_signs") == nil, true, "Trouble obsolete option removed")
 
 print(string.format("plugin_specs: %d passed, %d failed", passed, failed))

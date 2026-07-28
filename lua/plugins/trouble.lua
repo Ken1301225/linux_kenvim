@@ -6,7 +6,6 @@ return {
       -- your settings here
       auto_open = false,      -- 有错误时自动打开
       auto_close = true,      -- 无错误时自动关闭
-      use_diagnostic_signs = true,
     })
 
     -- 快捷键
