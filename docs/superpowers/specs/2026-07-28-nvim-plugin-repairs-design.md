@@ -22,7 +22,8 @@ The repair covers these behaviors:
 6. Prevent disabled CopilotChat configuration from registering an autocmd.
 7. Keep code_runner state local, handle cancelled argument input without
    running a command, and preserve the current C/C++ runner workflow.
-8. Replace Trouble's obsolete diagnostic-sign option with the supported name.
+8. Remove Trouble's obsolete diagnostic-sign option; the current plugin reads
+   signs directly from Neovim's diagnostic configuration.
 9. Disable lazy.nvim LuaRocks support because no configured plugin requires it.
 
 Missing Java, Deno, Node provider, Perl provider, and LuaSnip `jsregexp` support
@@ -60,4 +61,3 @@ runtime mappings. Final verification will include:
 - runtime inspection showing DAP is initially unloaded;
 - a Lua buffer check for Treesitter and LSP attachment;
 - startup-time measurement for comparison with the previous ~176 ms baseline.
-

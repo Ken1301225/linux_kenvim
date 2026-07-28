@@ -230,7 +230,7 @@ Run:
 
 ```bash
 nvim --clean -l tests/config/lazy_specs.lua
-nvim --headless "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
 ```
 
 Expected: `lazy_specs: 0 failed`; both runtime assertions exit 0.
@@ -255,7 +255,7 @@ git commit -m "perf: defer DAP and Mason initialization"
 **Interfaces:**
 - Produces: loading the disabled CopilotChat spec has no autocmd side effects.
 - Produces: cancelling a C/C++ argument prompt does not invoke code_runner.
-- Produces: Trouble uses `use_diagnostic_signs`.
+- Produces: Trouble has no obsolete diagnostic-sign toggle.
 
 - [ ] **Step 1: Write the failing behavior test**
 
@@ -294,7 +294,7 @@ vim.ui.input = original_input
 package.loaded["code_runner.commands"] = nil
 
 local trouble_source = table.concat(vim.fn.readfile("lua/plugins/trouble.lua"), "\n")
-eq(trouble_source:find("use_diagnostic_signs%s*=%s*true") ~= nil, true, "Trouble supported sign option")
+eq(trouble_source:find("use_diagnostic_signs") == nil, true, "Trouble removed legacy sign option")
 eq(trouble_source:find("use_lsp_diagnostic_signs") == nil, true, "Trouble obsolete option removed")
 
 print(string.format("plugin_specs: %d passed, %d failed", passed, failed))
@@ -321,19 +321,10 @@ if input == nil then
 end
 ```
 
-- [ ] **Step 5: Replace Trouble's obsolete option**
+- [ ] **Step 5: Remove Trouble's obsolete option**
 
-Change:
-
-```lua
-use_lsp_diagnostic_signs = true,
-```
-
-to:
-
-```lua
-use_diagnostic_signs = true,
-```
+Delete `use_lsp_diagnostic_signs`; current Trouble versions read signs from
+Neovim's diagnostic configuration without a plugin-level toggle.
 
 - [ ] **Step 6: Run the test and verify GREEN**
 
@@ -410,10 +401,10 @@ Expected: every process exits 0 with zero failed assertions.
 Run:
 
 ```bash
-nvim --headless +qa
-nvim --headless --startuptime /tmp/nvim-repaired-startup.log +qa
-nvim --headless "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
-nvim --headless "+checkhealth" "+w! /tmp/nvim-repaired-health.txt" +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua --startuptime /tmp/nvim-repaired-startup.log +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua "+lua local c=require('lazy.core.config').plugins; assert(not c['nvim-dap']._.loaded); assert(not c['nvim-dap-python']._.loaded)" +qa
+nvim --headless --cmd "set runtimepath^=/home/ken/.config/nvim/.worktrees/nvim-plugin-repairs" -u /home/ken/.config/nvim/.worktrees/nvim-plugin-repairs/init.lua "+checkhealth" "+w! /tmp/nvim-repaired-health.txt" +qa
 ```
 
 Expected: all commands exit 0; DAP assertions pass; health output has no Python provider or lazy.nvim LuaRocks error.
@@ -433,4 +424,3 @@ Expected: no relevant error matches, no whitespace errors, and only intentional 
 - [ ] **Step 7: Record environment verification**
 
 No repository commit is required for the Python package installation. Record the installed `pynvim` path and measured startup time in the final handoff.
-

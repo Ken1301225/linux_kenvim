@@ -16,27 +16,33 @@ vim.opt.nrformats = "bin,hex,alpha"
 vim.opt.termguicolors = true
 vim.o.exrc = true
 
--- 自动用 feh 打开图片，zathura 打开 PDF
-vim.api.nvim_create_autocmd("BufReadPost", {
-    pattern = {"*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif","*.pdf"},
-    callback = function()
-        -- 保存当前缓冲区位置，防止跳转影响
-        local file = vim.fn.expand("<afile>")
-        -- 调用系统 feh 打开
-        vim.fn.jobstart({"feh", file}, {detach = true})
-        -- 关闭当前 buffer
-        vim.cmd("bdelete!")
+local function first_executable(candidates)
+    for _, candidate in ipairs(candidates) do
+        local executable = vim.fn.exepath(candidate)
+        if executable ~= "" then
+            return executable
+        end
     end
-})
+end
 
-vim.api.nvim_create_autocmd("BufReadPost", {
-    pattern = {"*.pdf"},
-    callback = function()
-        local file = vim.fn.expand("<afile>")
-        vim.fn.jobstart({"mupdf", file}, {detach = true})
-        vim.cmd("bdelete!")
+local function register_external_opener(patterns, candidates)
+    local executable = first_executable(candidates)
+    if not executable then
+        return
     end
-})
+
+    vim.api.nvim_create_autocmd("BufReadPost", {
+        pattern = patterns,
+        callback = function(args)
+            local file = vim.api.nvim_buf_get_name(args.buf)
+            vim.fn.jobstart({executable, file}, {detach = true})
+            vim.api.nvim_buf_delete(args.buf, {force = true})
+        end,
+    })
+end
+
+register_external_opener({"*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif"}, {"feh", "imv", "xdg-open"})
+register_external_opener({"*.pdf"}, {"zathura"})
 
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "copilot-chat",
