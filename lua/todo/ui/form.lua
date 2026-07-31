@@ -2,7 +2,8 @@ local util = require("todo.util")
 
 local M = {}
 
-local FIELD_NAMES = { title = true, date = true, category = true, priority = true, done = true }
+-- 字段标签：inline 虚拟文本，用户无法删除（buffer 里只存值）
+local LABELS = { "title:    ", "date:     ", "category: ", "priority: ", "done:     " }
 
 local function split_lines(s)
   local out = {}
@@ -12,51 +13,46 @@ local function split_lines(s)
   return out
 end
 
--- 解析表单 buffer 内容 -> task | nil, err
+-- 按行位置解析表单 -> task | nil, err
+-- 行序：1 title, 2 date, 3 category, 4 priority, 5 done, 6+ notes
 local function parse_form(buf, cfg)
-  local fields, notes_lines, in_notes = {}, {}, false
-  for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
-    if in_notes then
-      notes_lines[#notes_lines + 1] = l
-    else
-      local k, v = l:match("^(%w+):%s?(.*)$")
-      if k == "notes" then
-        in_notes = true
-      elseif k and FIELD_NAMES[k] then
-        fields[k] = vim.trim(v)
-      else
-        return nil, "无法解析的行（字段须为 title/date/category/priority/done/notes）: " .. l
-      end
-    end
+  local fl = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local function val(i)
+    return vim.trim(fl[i] or "")
   end
-  if fields.title == nil or fields.title == "" then
+  local title, date, category, priority, done = val(1), val(2), val(3), val(4), val(5)
+
+  if title == "" then
     return nil, "title 不能为空"
   end
-  if not fields.date or not util.is_valid_date(fields.date) then
-    return nil, "date 非法（须为 YYYY-MM-DD）: " .. tostring(fields.date)
+  if not util.is_valid_date(date) then
+    return nil, "date 非法（须为 YYYY-MM-DD）: " .. date
   end
-  local category = fields.category
-  if category == "" or category == nil then
+  if category == "" then
     category = nil
   elseif not cfg.categories[category] then
     return nil, "未知分类: " .. category .. "（可选: " .. table.concat(vim.tbl_keys(cfg.categories), ", ") .. "）"
   end
-  local pri = fields.priority
-  if pri ~= "high" and pri ~= "medium" and pri ~= "low" then
+  if priority ~= "high" and priority ~= "medium" and priority ~= "low" then
     return nil, "priority 须为 high/medium/low"
   end
-  local done = fields.done
   if done ~= "true" and done ~= "false" then
     return nil, "done 须为 true/false"
+  end
+
+  local notes_lines = {}
+  for i = 6, #fl do
+    notes_lines[#notes_lines + 1] = fl[i]
   end
   while #notes_lines > 0 and notes_lines[#notes_lines] == "" do
     notes_lines[#notes_lines] = nil
   end
+
   return {
-    title = fields.title,
-    date = fields.date,
+    title = title,
+    date = date,
     category = category,
-    priority = pri,
+    priority = priority,
     done = (done == "true"),
     notes = table.concat(notes_lines, "\n"),
   }
@@ -66,13 +62,14 @@ end
 function M.open(task, cfg, on_save)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
+
+  -- buffer 只放值
   local lines = {
-    "title: " .. task.title,
-    "date: " .. task.date,
-    "category: " .. (task.category or ""),
-    "priority: " .. task.priority,
-    "done: " .. tostring(task.done),
-    "notes:",
+    task.title,
+    task.date,
+    task.category or "",
+    task.priority,
+    tostring(task.done),
   }
   if task.notes and task.notes ~= "" then
     for _, l in ipairs(split_lines(task.notes)) do
@@ -81,8 +78,20 @@ function M.open(task, cfg, on_save)
   end
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
+  -- 标签用 inline 虚拟文本展示（删不掉）
+  local label_ns = vim.api.nvim_create_namespace("todo_cal_form_label")
+  for i = 1, 5 do
+    vim.api.nvim_buf_set_extmark(buf, label_ns, i - 1, 0, {
+      virt_text = { { LABELS[i], "TodoCalOtherMonth" } },
+      virt_text_pos = "inline",
+    })
+  end
+  vim.api.nvim_buf_set_extmark(buf, label_ns, 4, 0, {
+    virt_lines = { { { "notes:", "TodoCalOtherMonth" } } },
+  })
+
   local width = 56
-  local height = math.min(#lines, math.floor(vim.o.lines * 0.6))
+  local height = math.min(#lines + 1, math.floor(vim.o.lines * 0.6))
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     width = width,
@@ -91,12 +100,11 @@ function M.open(task, cfg, on_save)
     col = math.floor((vim.o.columns - width) / 2),
     border = "rounded",
     style = "minimal",
-    title = " 任务（<CR> 保存，q 取消） ",
+    title = " 任务（<C-s> 保存，q 取消） ",
     title_pos = "center",
     zindex = 50,
   })
   vim.wo[win].wrap = false
-  vim.api.nvim_win_set_cursor(win, { 1, 7 })
 
   local err_ns = vim.api.nvim_create_namespace("todo_cal_form")
   local function show_error(msg)
@@ -119,6 +127,10 @@ function M.open(task, cfg, on_save)
     on_save(t)
   end
 
+  vim.keymap.set({ "n", "i" }, "<C-s>", function()
+    vim.cmd.stopinsert()
+    try_save()
+  end, { buffer = buf, silent = true })
   vim.keymap.set("n", "<CR>", try_save, { buffer = buf, nowait = true, silent = true })
   vim.keymap.set("n", "q", function()
     if vim.api.nvim_win_is_valid(win) then
@@ -126,6 +138,10 @@ function M.open(task, cfg, on_save)
     end
   end, { buffer = buf, nowait = true, silent = true })
   vim.api.nvim_create_autocmd("BufWriteCmd", { buffer = buf, callback = try_save })
+
+  -- 打开即进入 insert（光标在 title 值处）
+  vim.api.nvim_win_set_cursor(win, { 1, 0 })
+  vim.cmd.startinsert()
 end
 
 return M
