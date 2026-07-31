@@ -4,7 +4,7 @@ local h = require("todo.helper")
 -- 准备数据文件
 local tmp = vim.fn.tempname() .. ".md"
 local fd = io.open(tmp, "w")
-fd:write("## 2026-07-15\n- [ ] 任务A @nlp !high\n- [x] 任务B\n\n## 2026-07-28\n- [ ] 任务C\n")
+fd:write("## 2026-07-15\n- [ ] 任务A @nlp !high\n- [x] 任务B\n\n## 2026-07-28\n- [ ] 任务C\n\n## 2026-07-20\n- [ ] 每周打卡 @every week\n")
 fd:close()
 
 -- 无头环境默认 80x24 太窄，放大以获得真实布局
@@ -12,6 +12,7 @@ vim.o.columns = 200
 vim.o.lines = 60
 
 local todo = require("todo")
+local store = require("todo.store")
 todo.setup({ file = tmp, categories = { nlp = { color = "#7aa2f7" } } })
 todo.open()
 
@@ -49,7 +50,23 @@ h.eq(side_joined():find("任务C", 1, true) ~= nil, true, "侧边栏显示任务
 h.eq(side_joined():find("任务B", 1, true) == nil, true, "侧边栏不显示已完成")
 h.eq(side_joined():find("2026-07-15", 1, true) ~= nil, true, "侧边栏日期头")
 
+-- 周期任务标记：月历与侧边栏显示 ↻
+h.eq(joined():find("每周打卡", 1, true) ~= nil, true, "月历显示周期任务")
+h.eq(joined():find("↻", 1, true) ~= nil, true, "月历显示周期标记")
+h.eq(side_joined():find("↻", 1, true) ~= nil, true, "侧边栏显示周期标记")
+
+-- 完成周期任务 -> 生成下个实例
+todo.state.month_cursor = "2026-07-20"
+todo.refresh()
+todo.actions.toggle_task(store.by_date("2026-07-20")[1])
+h.eq(store.by_date("2026-07-20")[1].done, true, "周期任务完成")
+h.eq(store.by_date("2026-07-27")[1] ~= nil, true, "下周自动生成新实例")
+h.eq(store.by_date("2026-07-27")[1].done, false, "新实例未完成")
+h.eq(store.by_date("2026-07-27")[1].cycle, "week", "新实例保留周期")
+
 -- 快速通道：月视图 h 移动后 buffer 文本不变
+todo.state.month_cursor = "2026-07-15"
+todo.refresh()
 local before = joined()
 for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._buf, "n")) do
   if mp.lhs == "h" then mp.callback() end
@@ -64,11 +81,14 @@ todo.actions.focus_toggle()
 h.eq(todo.state.focus, "sidebar", "Tab 切到侧边栏")
 h.eq(vim.api.nvim_get_current_win(), todo._side_win, "当前窗口为侧边栏")
 
--- 侧边栏 j 移动 + <CR> 跳转（任务A -> 任务C）
+-- 侧边栏 j 移动 + <CR> 跳转（任务A -> 每周打卡 -> 任务C）
 for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._side_buf, "n")) do
   if mp.lhs == "j" then mp.callback() end
 end
-h.eq(todo.state.side_sel_id, "2026-07-28-1", "j 选中任务C")
+for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._side_buf, "n")) do
+  if mp.lhs == "j" then mp.callback() end
+end
+h.eq(todo.state.side_sel_id, "2026-07-28-1", "j 两次选中任务C")
 for _, mp in ipairs(vim.api.nvim_buf_get_keymap(todo._side_buf, "n")) do
   if mp.lhs == "<CR>" then mp.callback() end
 end
@@ -87,7 +107,6 @@ has("任务A", "周视图显示任务")
 
 -- 周视图动作：toggle（单任务日期不弹选择器）
 todo.actions.toggle("2026-07-28")
-local store = require("todo.store")
 h.eq(store.by_date("2026-07-28")[1].done, true, "toggle 生效并落盘")
 
 -- 回月视图

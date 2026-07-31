@@ -2,6 +2,9 @@ local M = {}
 
 M.dow_names = { "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日" }
 
+-- 周期任务标记（月历/周视图/侧边栏共用）
+M.cycle_mark = " ↻"
+
 -- 逐字符迭代 UTF-8 字符串
 function M.each_char(s)
   return s:gmatch("[%z\1-\127\194-\244][\128-\191]*")
@@ -108,6 +111,42 @@ function M.week_dates(s)
     days[#days + 1] = M.add_days(start, i)
   end
   return days
+end
+
+-- 周期性任务的下一次发生日期；cycle 语法：day|week|month|Nd|Nw|Nm，非法返回 nil
+function M.next_occurrence(date, cycle)
+  if cycle == "day" then return M.add_days(date, 1) end
+  if cycle == "week" then return M.add_days(date, 7) end
+  if cycle == "month" then
+    local y, m, d = M.split_date(date)
+    y, m = M.add_months(y, m, 1)
+    d = math.min(d, M.days_in_month(y, m))
+    return M.make_date(y, m, d)
+  end
+  local n, u
+  if cycle then
+    n, u = cycle:match("^(%d+)([dw])$")
+  end
+  if n and u == "d" then return M.add_days(date, tonumber(n)) end
+  if n and u == "w" then return M.add_days(date, tonumber(n) * 7) end
+  if cycle then
+    n = cycle:match("^(%d+)m$")
+  end
+  if n then
+    local y, m, d = M.split_date(date)
+    y, m = M.add_months(y, m, tonumber(n))
+    d = math.min(d, M.days_in_month(y, m))
+    return M.make_date(y, m, d)
+  end
+  return nil
+end
+
+-- cycle 语法校验：返回规范化值或 nil
+function M.normalize_cycle(v)
+  if v == nil or v == "" then return nil end
+  if v == "day" or v == "week" or v == "month" then return v end
+  if v:match("^%d+[dwm]$") then return v end
+  return nil
 end
 
 return M

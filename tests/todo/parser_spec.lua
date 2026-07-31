@@ -56,4 +56,20 @@ local s = parser.serialize({
 h.eq(s, table.concat({ "## 2026-07-01", "- [x] a !high", "  n", "",
   "## 2026-08-01", "- [ ] b", "" }, "\n"), "序列化排序与格式")
 
+-- 7. 周期任务 @every
+local t7 = parser.parse("## 2026-07-28\n- [ ] 每周健身 @every week @nlp !high\n- [ ] 每 3 天吃药 @every 3d\n")
+h.eq(t7[1].cycle, "week", "解析 @every week")
+h.eq(t7[1].category, "nlp", "@every 与 @分类共存")
+h.eq(t7[1].priority, "high", "@every 与 !优先级共存")
+h.eq(t7[1].title, "每周健身", "@every 从标题剥离")
+h.eq(t7[2].cycle, "3d", "解析 @every 3d")
+-- 序列化往返
+local t8, u8 = parser.parse(parser.serialize(t7, {}))
+h.eq(t8[1].cycle, "week", "周期往返一致")
+h.eq(t8[1].title, "每周健身", "周期任务标题往返")
+-- 非法周期不回剥（留在标题里）
+local t9 = parser.parse("## 2026-07-28\n- [ ] 看 @every 特价\n")
+h.eq(t9[1].cycle, nil, "非法 @every 不解析")
+h.eq(t9[1].title, "看 @every 特价", "非法 @every 留在标题")
+
 h.finish("parser")

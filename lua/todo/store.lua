@@ -1,4 +1,5 @@
 local parser = require("todo.parser")
+local util = require("todo.util")
 
 local M = {
   file = nil,
@@ -93,6 +94,38 @@ function M.toggle(id)
   local t = M.find(id)
   if not t then return false, "not found" end
   t.done = not t.done
+  return M.save()
+end
+
+-- 完成周期任务：标记完成并在下个周期日期生成新未完成实例（目标日期已有同标题同周期未完成实例则不生成）
+function M.complete_and_spawn(id)
+  local t = M.find(id)
+  if not t then return false, "not found" end
+  t.done = true
+  if t.cycle then
+    local next_date = util.next_occurrence(t.date, t.cycle)
+    if next_date then
+      local dup = false
+      for _, o in ipairs(M.tasks) do
+        if o ~= t and not o.done and o.date == next_date and o.title == t.title and o.cycle == t.cycle then
+          dup = true
+          break
+        end
+      end
+      if not dup then
+        M.tasks[#M.tasks + 1] = {
+          title = t.title,
+          date = next_date,
+          category = t.category,
+          priority = t.priority,
+          done = false,
+          notes = t.notes,
+          cycle = t.cycle,
+        }
+      end
+    end
+  end
+  derive_ids()
   return M.save()
 end
 

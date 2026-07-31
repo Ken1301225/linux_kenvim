@@ -23,11 +23,13 @@ local function col_rows(tasks, cw, max_rows)
       local s = util.truncate(bullet .. t.title, cw)
       line1 = { { text = s, hl = "TodoCalDone" }, { text = string.rep(" ", cw - util.strwidth(s)) } }
     else
-      local title = util.truncate(t.title, cw - util.strwidth(bullet))
+      local cyc = t.cycle and util.cycle_mark or ""
+      local title = util.truncate(t.title, cw - util.strwidth(bullet) - util.strwidth(cyc))
       line1 = {
         { text = bullet, hl = hl.cat(t.category) },
         { text = title },
-        { text = string.rep(" ", cw - util.strwidth(bullet) - util.strwidth(title)) },
+        { text = cyc },
+        { text = string.rep(" ", cw - util.strwidth(bullet) - util.strwidth(title) - util.strwidth(cyc)) },
       }
     end
     local marks = hl.pri_marks(t.priority)

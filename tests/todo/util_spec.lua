@@ -51,4 +51,22 @@ h.eq(util.fit("你好", 6), "你好  ", "fit 中文补齐")
 h.eq(util.fit("ab", 4), "ab  ", "fit 英文补齐")
 h.eq(util.pad_right("abc", 3), "abc", "已够宽原样")
 
+-- next_occurrence（周期任务）
+h.eq(util.next_occurrence("2026-07-28", "day"), "2026-07-29", "每日")
+h.eq(util.next_occurrence("2026-07-28", "week"), "2026-08-04", "每周")
+h.eq(util.next_occurrence("2026-07-28", "month"), "2026-08-28", "每月")
+h.eq(util.next_occurrence("2026-01-31", "month"), "2026-02-28", "月末夹取")
+h.eq(util.next_occurrence("2028-01-31", "month"), "2028-02-29", "闰年月末夹取")
+h.eq(util.next_occurrence("2026-07-28", "3d"), "2026-07-31", "每 3 天")
+h.eq(util.next_occurrence("2026-07-28", "2w"), "2026-08-11", "每 2 周")
+h.eq(util.next_occurrence("2026-07-28", "2m"), "2026-09-28", "每 2 月")
+h.eq(util.next_occurrence("2026-07-28", "xyz"), nil, "非法周期返回 nil")
+
+-- normalize_cycle
+h.eq(util.normalize_cycle("day"), "day", "day 合法")
+h.eq(util.normalize_cycle("3d"), "3d", "3d 合法")
+h.eq(util.normalize_cycle(""), nil, "空为无周期")
+h.eq(util.normalize_cycle(nil), nil, "nil 为无周期")
+h.eq(util.normalize_cycle("每周"), nil, "非法语法拒绝")
+
 h.finish("util")

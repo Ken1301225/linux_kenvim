@@ -58,7 +58,8 @@ function M.render(ctx)
       else
         local t = it.task
         local bullet = " ● "
-        local marks = hl.pri_marks(t.priority)
+        local cyc = t.cycle and util.cycle_mark or ""
+        local marks = cyc .. hl.pri_marks(t.priority)
         local title = util.truncate(t.title, width - util.strwidth(bullet) - util.strwidth(marks))
         local parts, byte = {}, 0
         local lnum = #lines

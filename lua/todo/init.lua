@@ -210,7 +210,11 @@ function M.actions.edit(date)
 end
 
 function M.actions.toggle_task(t)
-  persist(store.toggle(t.id))
+  if not t.done and t.cycle then
+    persist(store.complete_and_spawn(t.id))
+  else
+    persist(store.toggle(t.id))
+  end
 end
 
 function M.actions.toggle(date)

@@ -11,7 +11,7 @@ local function parse_task_line(line)
   local check, rest = line:match("^%- %[([ x])%] (.*)$")
   if not check then return nil end
   local task = { done = (check == "x"), priority = "medium", notes = "" }
-  -- 尾部元数据：先 !优先级，后 @分类（与 serialize 输出顺序对应）
+  -- 尾部元数据（自尾向首）：!优先级 -> @分类 -> @every 周期（与 serialize 输出顺序对应）
   local pri = rest:match("!(%a+)%s*$")
   if pri == "high" or pri == "medium" or pri == "low" then
     task.priority = pri
@@ -21,6 +21,11 @@ local function parse_task_line(line)
   if cat then
     task.category = cat
     rest = rest:gsub("%s*@[%w_%-]+%s*$", "")
+  end
+  local cyc = rest:match("@every%s+(%S+)%s*$")
+  if cyc and util.normalize_cycle(cyc) then
+    task.cycle = cyc
+    rest = rest:gsub("%s*@every%s+%S+%s*$", "")
   end
   task.title = trim(rest)
   return task
@@ -88,6 +93,9 @@ end
 
 local function task_line(t)
   local parts = { "- [", t.done and "x" or " ", "] ", t.title }
+  if t.cycle then
+    parts[#parts + 1] = " @every " .. t.cycle
+  end
   if t.category then
     parts[#parts + 1] = " @" .. t.category
   end

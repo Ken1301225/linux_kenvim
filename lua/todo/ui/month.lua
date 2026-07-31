@@ -26,7 +26,7 @@ local function task_segs(t, cw)
     return { { text = s, hl = "TodoCalDone" }, { text = string.rep(" ", cw - util.strwidth(s)) } }
   end
   local bullet = " ● "
-  local marks = hl.pri_marks(t.priority)
+  local marks = (t.cycle and util.cycle_mark or "") .. hl.pri_marks(t.priority)
   local title = util.truncate(t.title, cw - util.strwidth(bullet) - util.strwidth(marks))
   local segs = {
     { text = bullet, hl = hl.cat(t.category) },

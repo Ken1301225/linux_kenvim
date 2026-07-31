@@ -60,5 +60,30 @@ local dm = store.by_date_map()
 h.eq(#dm["2026-07-01"], 2, "by_date_map 同日两个")
 h.eq(dm["2026-07-02"][1].title, "丙", "by_date_map 内容")
 
+-- 周期任务完成：生成下一个实例
+store.add({ title = "每周健身", date = "2026-07-28", category = "nlp",
+  priority = "high", done = false, notes = "备注", cycle = "week" })
+local ok5, err5 = store.complete_and_spawn("2026-07-28-1")
+h.eq(ok5, true, "complete_and_spawn 成功")
+h.eq(err5, nil, "无错误")
+h.eq(store.tasks[4].done, true, "原实例完成")
+h.eq(#store.tasks, 5, "生成新实例后共 5 个（甲乙丙+原实例+新实例）")
+local spawned = store.by_date("2026-08-04")[1]
+h.eq(spawned ~= nil, true, "下周同日期生成新实例")
+h.eq(spawned.done, false, "新实例未完成")
+h.eq(spawned.cycle, "week", "新实例保留周期")
+h.eq(spawned.title, "每周健身", "新实例同标题")
+h.eq(spawned.notes, "备注", "新实例保留备注")
+-- 目标日期已有未完成实例则不重复生成：07-28 改回未完成再完成
+store.tasks[4].done = false
+local ok6 = store.complete_and_spawn("2026-07-28-1")
+h.eq(ok6, true, "再完成一次成功")
+h.eq(#store.tasks, 5, "下个日期已有未完成实例时不重复生成")
+-- 非周期任务走普通 toggle 语义（complete_and_spawn 也安全）
+store.add({ title = "普通", date = "2026-07-10", priority = "medium", done = false, notes = "" })
+local ok7 = store.complete_and_spawn("2026-07-10-1")
+h.eq(ok7, true, "非周期任务 complete_and_spawn 安全")
+h.eq(store.by_date("2026-07-10")[1].done, true, "非周期任务完成")
+
 os.remove(tmp)
 h.finish("store")

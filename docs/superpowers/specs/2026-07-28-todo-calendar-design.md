@@ -184,3 +184,12 @@ notes:
 - 侧边栏键位：`j/k` 任务间移动（选中行整行反色）；`<CR>` 日历光标跳到该任务日期（焦点留在侧边栏）；`a/e/x/d/m` 语义同日历（`x` 完成后任务即从栏中消失）；`a` 使用选中任务日期（无选中则今天）
 - `state.side_sel_id` 记录选中任务 id，渲染时按 id 恢复选中，id 消失则回退到首个任务
 - 动作复用 `actions.edit_task/toggle_task/remove_task/move_task`；新增 `actions.jump_to_date(date)` 与 `actions.focus_toggle()`
+
+### A.4 周期性任务（2026-07-29）
+
+- 数据：任务行尾新增 `@every <周期>` 令牌，语法 `day | week | month | Nd | Nw | Nm`（N≥1 为自定义周期，如 `3d` 每 3 天、`2w` 每两周、`2m` 每两月）
+- 数据模型：`task.cycle`（Lua 关键字 `repeat` 不可用作字段名）；`util.normalize_cycle(v)` 校验语法，`util.next_occurrence(date, cycle)` 计算下次日期（月末夹取到当月天数，闰年正确）
+- 解析/序列化：剥离顺序自尾向首为 `!优先级` → `@分类` → `@every`；非法周期令牌不回剥（留在标题）
+- 完成行为：`store.complete_and_spawn(id)` —— 当前实例标完成，同时在 `next_occurrence` 日期生成同标题/分类/优先级/备注/周期的未完成新实例；目标日期已有同标题同周期未完成实例则不生成（防止同日反复完成导致重复）
+- 动作接入：`actions.toggle_task` 检测「未完成 + 有周期」时走 `complete_and_spawn`，否则普通 toggle
+- UI：月历/周视图/侧边栏任务行显示 `↻` 标记（`util.cycle_mark`）；表单新增 `repeat` 字段行（第 6 行，备注顺延至第 7 行起），语法校验失败不关闭表单

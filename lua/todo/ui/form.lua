@@ -3,7 +3,7 @@ local util = require("todo.util")
 local M = {}
 
 -- 字段标签：inline 虚拟文本，用户无法删除（buffer 里只存值）
-local LABELS = { "title:    ", "date:     ", "category: ", "priority: ", "done:     " }
+local LABELS = { "title:    ", "date:     ", "category: ", "priority: ", "done:     ", "repeat:   " }
 
 local function split_lines(s)
   local out = {}
@@ -14,13 +14,13 @@ local function split_lines(s)
 end
 
 -- 按行位置解析表单 -> task | nil, err
--- 行序：1 title, 2 date, 3 category, 4 priority, 5 done, 6+ notes
+-- 行序：1 title, 2 date, 3 category, 4 priority, 5 done, 6 repeat, 7+ notes
 local function parse_form(buf, cfg)
   local fl = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local function val(i)
     return vim.trim(fl[i] or "")
   end
-  local title, date, category, priority, done = val(1), val(2), val(3), val(4), val(5)
+  local title, date, category, priority, done, cycle = val(1), val(2), val(3), val(4), val(5), val(6)
 
   if title == "" then
     return nil, "title 不能为空"
@@ -39,9 +39,13 @@ local function parse_form(buf, cfg)
   if done ~= "true" and done ~= "false" then
     return nil, "done 须为 true/false"
   end
+  cycle = util.normalize_cycle(cycle)
+  if cycle == nil and val(6) ~= "" then
+    return nil, "repeat 须为 day/week/month/Nd/Nw/Nm（如 3d、2w）或留空"
+  end
 
   local notes_lines = {}
-  for i = 6, #fl do
+  for i = 7, #fl do
     notes_lines[#notes_lines + 1] = fl[i]
   end
   while #notes_lines > 0 and notes_lines[#notes_lines] == "" do
@@ -54,6 +58,7 @@ local function parse_form(buf, cfg)
     category = category,
     priority = priority,
     done = (done == "true"),
+    cycle = cycle,
     notes = table.concat(notes_lines, "\n"),
   }
 end
@@ -70,6 +75,7 @@ function M.open(task, cfg, on_save)
     task.category or "",
     task.priority,
     tostring(task.done),
+    task.cycle or "",
   }
   if task.notes and task.notes ~= "" then
     for _, l in ipairs(split_lines(task.notes)) do
@@ -80,13 +86,13 @@ function M.open(task, cfg, on_save)
 
   -- 标签用 inline 虚拟文本展示（删不掉）
   local label_ns = vim.api.nvim_create_namespace("todo_cal_form_label")
-  for i = 1, 5 do
+  for i = 1, 6 do
     vim.api.nvim_buf_set_extmark(buf, label_ns, i - 1, 0, {
       virt_text = { { LABELS[i], "TodoCalOtherMonth" } },
       virt_text_pos = "inline",
     })
   end
-  vim.api.nvim_buf_set_extmark(buf, label_ns, 4, 0, {
+  vim.api.nvim_buf_set_extmark(buf, label_ns, 5, 0, {
     virt_lines = { { { "notes:", "TodoCalOtherMonth" } } },
   })
 

@@ -75,14 +75,29 @@ h.eq(press(buf, "i", "<C-s>"), true, "insert 模式 <C-s> 存在")
 h.eq(get() and get().title, "新任务", "<C-s> 保存 title")
 h.eq(get() and get().category, "nlp", "<C-s> 保存 category")
 
--- 5. 备注多行往返
+-- 5. 备注多行往返（备注从第 7 行开始）
 local buf2, _, get2 = open_form({ title = "t", date = "2026-07-15", category = nil,
   priority = "medium", done = false, notes = "第一行\n第二行" })
 local l2 = all_lines(buf2)
-h.eq(l2[6], "第一行", "备注第 1 行")
-h.eq(l2[7], "第二行", "备注第 2 行")
+h.eq(l2[7], "第一行", "备注第 1 行")
+h.eq(l2[8], "第二行", "备注第 2 行")
 press(buf2, "n", "<CR>")
 h.eq(get2() and get2().notes, "第一行\n第二行", "备注往返")
+
+-- 5b. repeat 字段往返 + 校验
+local buf4, _, get4 = open_form({ title = "周期任务", date = "2026-07-15", category = nil,
+  priority = "medium", done = false, notes = "" })
+h.eq(all_lines(buf4)[6], "", "repeat 行初始为空")
+vim.api.nvim_buf_set_lines(buf4, 5, 6, false, { "3d" })
+press(buf4, "n", "<CR>")
+h.eq(get4() and get4().cycle, "3d", "repeat 3d 保存")
+local buf5, win5, get5 = open_form({ title = "x", date = "2026-07-15", category = nil,
+  priority = "medium", done = false, notes = "" })
+vim.api.nvim_buf_set_lines(buf5, 5, 6, false, { "每周" })
+press(buf5, "n", "<CR>")
+h.eq(get5(), nil, "非法 repeat 不保存")
+h.eq(vim.api.nvim_win_is_valid(win5), true, "非法 repeat 表单不关闭")
+press(buf5, "n", "q")
 
 -- 6. 校验失败不保存不关闭
 local buf3, win3, get3 = open_form({ title = "x", date = "2026-13-99", category = nil,
