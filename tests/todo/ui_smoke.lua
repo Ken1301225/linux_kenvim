@@ -24,7 +24,9 @@ local function has(s, label)
   h.eq(joined():find(s, 1, true) ~= nil, true, label)
 end
 
--- 月视图渲染
+-- 月视图渲染（先把光标固定到测试数据的月份，避免受“今天”日期影响）
+todo.state.month_cursor = "2026-07-15"
+todo.refresh()
 has("┌", "月视图有网格边框")
 has("2026 年 7 月", "月视图标题")
 has("星期一", "星期表头")
@@ -49,6 +51,11 @@ h.eq(side_joined():find("任务A", 1, true) ~= nil, true, "侧边栏显示任务
 h.eq(side_joined():find("任务C", 1, true) ~= nil, true, "侧边栏显示任务C")
 h.eq(side_joined():find("任务B", 1, true) == nil, true, "侧边栏不显示已完成")
 h.eq(side_joined():find("2026-07-15", 1, true) ~= nil, true, "侧边栏日期头")
+
+-- 底部命令栏
+h.eq(side_joined():find("a 新建", 1, true) ~= nil, true, "命令栏：a 新建")
+h.eq(side_joined():find("Tab 切窗", 1, true) ~= nil, true, "命令栏：Tab 切窗")
+h.eq(side_joined():find("q 关闭", 1, true) ~= nil, true, "命令栏：q 关闭")
 
 -- 周期任务标记：月历与侧边栏显示 ↻
 h.eq(joined():find("每周打卡", 1, true) ~= nil, true, "月历显示周期任务")

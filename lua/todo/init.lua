@@ -42,6 +42,11 @@ end
 
 function M.open()
   if M._win and vim.api.nvim_win_is_valid(M._win) then return end
+  -- 防孤儿窗口：日历已关但侧边栏残留（如被 <C-w>q 手动关掉日历）
+  if M._side_win and vim.api.nvim_win_is_valid(M._side_win) then
+    vim.api.nvim_win_close(M._side_win, true)
+  end
+  M._side_win = nil
   store.load()
   if not M.state then
     local today = util.today()

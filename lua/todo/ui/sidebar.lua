@@ -4,6 +4,13 @@ local hl = require("todo.ui.hl")
 
 local M = {}
 
+-- 底部常用命令速查（静态）
+local FOOTER = {
+  "a 新建  e 编辑  x 完成",
+  "d 删除  m 移期  <CR> 跳转",
+  "Tab 切窗  q 关闭",
+}
+
 -- 上次渲染的任务行映射：task_lnums = {lnum,...}（0 基行号），id_at[lnum] = 任务id
 local task_lnums, id_at = {}, {}
 
@@ -33,50 +40,68 @@ end
 function M.render(ctx)
   if not (ctx.side_win and vim.api.nvim_win_is_valid(ctx.side_win)) then return end
   local width = vim.api.nvim_win_get_width(ctx.side_win)
+  local win_h = vim.api.nvim_win_get_height(ctx.side_win)
   local today = util.today()
   local items = build_items()
   local lines, spans = {}, {}
   task_lnums, id_at = {}, {}
 
+  -- 布局：内容区(含 +N 溢出槽) + 分隔线 + 命令栏；总行数 = 窗口高（底部命令栏钉底）
+  local footer_h = #FOOTER + 1 -- 分隔线 + 3 行提示
+  local content_h = math.max(1, win_h - footer_h)
+  local max_rows = math.max(1, content_h - 1) -- 留 1 行给 +N 溢出提示
+
   if #items == 0 then
     lines[1] = " 没有未完成的任务"
     spans[1] = { 0, 0, #lines[1], "TodoCalOtherMonth" }
   else
+    local hidden = 0
     for _, it in ipairs(items) do
       if it.type == "date" then
-        local label = string.format(" %s %s", it.date, util.dow_names[util.weekday(it.date)])
-        local group
-        if it.date == today then
-          group = "TodoCalToday"
-        elseif it.date < today then
-          group = "TodoCalPriHigh"
-        else
-          group = "TodoCalHeader"
-        end
-        lines[#lines + 1] = label
-        spans[#spans + 1] = { #lines - 1, 0, #label, group }
-      else
-        local t = it.task
-        local bullet = " ● "
-        local cyc = t.cycle and util.cycle_mark or ""
-        local marks = cyc .. hl.pri_marks(t.priority)
-        local title = util.truncate(t.title, width - util.strwidth(bullet) - util.strwidth(marks))
-        local parts, byte = {}, 0
-        local lnum = #lines
-        local function add(text, group)
-          parts[#parts + 1] = text
-          if group then
-            spans[#spans + 1] = { lnum, byte, byte + #text, group }
+        if #lines < max_rows then
+          local label = string.format(" %s %s", it.date, util.dow_names[util.weekday(it.date)])
+          local group
+          if it.date == today then
+            group = "TodoCalToday"
+          elseif it.date < today then
+            group = "TodoCalPriHigh"
+          else
+            group = "TodoCalHeader"
           end
-          byte = byte + #text
+          lines[#lines + 1] = label
+          spans[#spans + 1] = { #lines - 1, 0, #label, group }
         end
-        add(bullet, hl.cat(t.category))
-        add(title)
-        add(marks, hl.pri_hl(t.priority))
-        lines[#lines + 1] = table.concat(parts)
-        task_lnums[#task_lnums + 1] = lnum
-        id_at[lnum] = t.id
+      else
+        if #lines < max_rows then
+          local t = it.task
+          local bullet = " ● "
+          local cyc = t.cycle and util.cycle_mark or ""
+          local marks = cyc .. hl.pri_marks(t.priority)
+          local title = util.truncate(t.title, width - util.strwidth(bullet) - util.strwidth(marks))
+          local parts, byte = {}, 0
+          local lnum = #lines
+          local function add(text, group)
+            parts[#parts + 1] = text
+            if group then
+              spans[#spans + 1] = { lnum, byte, byte + #text, group }
+            end
+            byte = byte + #text
+          end
+          add(bullet, hl.cat(t.category))
+          add(title)
+          add(marks, hl.pri_hl(t.priority))
+          lines[#lines + 1] = table.concat(parts)
+          task_lnums[#task_lnums + 1] = lnum
+          id_at[lnum] = t.id
+        else
+          hidden = hidden + 1
+        end
       end
+    end
+    if hidden > 0 then
+      local s = " +" .. hidden
+      lines[#lines + 1] = s
+      spans[#spans + 1] = { #lines - 1, 0, #s, "TodoCalOverflow" }
     end
   end
 
@@ -96,6 +121,18 @@ function M.render(ctx)
   end
   if sel_lnum then
     spans[#spans + 1] = { sel_lnum, 0, #lines[sel_lnum + 1], "TodoCalCursor", 300 }
+  end
+
+  -- 分隔线 + 底部命令速查（固定悬底）
+  lines[#lines + 1] = string.rep("─", width)
+  spans[#spans + 1] = { #lines - 1, 0, width, "TodoCalBorder" }
+  for _, hint in ipairs(FOOTER) do
+    lines[#lines + 1] = " " .. hint
+    spans[#spans + 1] = { #lines - 1, 0, #hint + 1, "TodoCalOtherMonth" }
+  end
+  -- 补齐到窗口高度，保证命令栏钉在窗口底部
+  while #lines < win_h do
+    lines[#lines + 1] = ""
   end
 
   M._task_lnums = task_lnums
