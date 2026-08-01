@@ -90,6 +90,7 @@ function M.open(task, cfg, on_save)
     vim.api.nvim_buf_set_extmark(buf, label_ns, i - 1, 0, {
       virt_text = { { LABELS[i], "TodoCalOtherMonth" } },
       virt_text_pos = "inline",
+      right_gravity = false,
     })
   end
   vim.api.nvim_buf_set_extmark(buf, label_ns, 5, 0, {

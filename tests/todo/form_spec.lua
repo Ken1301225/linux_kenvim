@@ -40,17 +40,25 @@ for _, l in ipairs(lines) do
 end
 h.eq(has_label_text, false, "buffer 中不存在标签文字")
 
--- 2. 标签以 inline 虚拟文本存在
+-- 2. 标签以 inline 虚拟文本存在，且输入不会把标签推到值后面
 local label_found = false
+local title_label_ns, title_label_id
 for _, ns_id in pairs(vim.api.nvim_get_namespaces()) do
   for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns_id, 0, -1, { details = true })) do
     local vt = m[4].virt_text
     if vt and vt[1] and vt[1][1] and vt[1][1]:find("title:") and m[4].virt_text_pos == "inline" then
       label_found = true
+      title_label_ns = ns_id
+      title_label_id = m[1]
     end
   end
 end
 h.eq(label_found, true, "title 标签为 inline 虚拟文本")
+
+vim.api.nvim_buf_set_text(buf, 0, 0, 0, 0, { "新任务" })
+local title_mark = vim.api.nvim_buf_get_extmark_by_id(buf, title_label_ns, title_label_id, {})
+h.eq(title_mark[2], 0, "输入后 title 标签仍锚定第 0 列")
+h.eq(all_lines(buf)[1], "新任务", "输入内容只写入 title 值")
 
 -- 3. 打开即 insert 模式（-l 脚本同步执行，看不到模式切换；用无头子进程验证）
 local snippet = [[
