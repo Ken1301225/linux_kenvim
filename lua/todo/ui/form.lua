@@ -81,6 +81,8 @@ function M.open(task, cfg, on_save)
     for _, l in ipairs(split_lines(task.notes)) do
       lines[#lines + 1] = l
     end
+  else
+    lines[#lines + 1] = ""
   end
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 

@@ -28,12 +28,17 @@ local function all_lines(buf)
 end
 
 -- 1. 表单 buffer 只含值，不含标签文字（标签删不掉）
-local buf, _, get = open_form({ title = "", date = "2026-07-15", category = nil,
+local buf, win, get = open_form({ title = "", date = "2026-07-15", category = nil,
   priority = "medium", done = false, notes = "" })
 local lines = all_lines(buf)
 h.eq(lines[1], "", "第 1 行是纯 title 值（无标签）")
 h.eq(lines[2], "2026-07-15", "第 2 行是纯 date 值")
 h.eq(lines[4], "medium", "第 4 行是纯 priority 值")
+h.eq(lines[7], "", "空 notes 仍创建第 7 行")
+local notes_cursor_ok = pcall(vim.api.nvim_win_set_cursor, win, { 7, 0 })
+h.eq(notes_cursor_ok, true, "光标可进入空 notes 行")
+local notes_write_ok = pcall(vim.api.nvim_buf_set_text, buf, 6, 0, 6, 0, { "新备注" })
+h.eq(notes_write_ok, true, "空 notes 行可写入")
 local has_label_text = false
 for _, l in ipairs(lines) do
   if l:find("title:") or l:find("date:") then has_label_text = true end
@@ -82,6 +87,7 @@ vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "nlp" })
 h.eq(press(buf, "i", "<C-s>"), true, "insert 模式 <C-s> 存在")
 h.eq(get() and get().title, "新任务", "<C-s> 保存 title")
 h.eq(get() and get().category, "nlp", "<C-s> 保存 category")
+h.eq(get() and get().notes, "新备注", "空 notes 行输入后保存")
 
 -- 5. 备注多行往返（备注从第 7 行开始）
 local buf2, _, get2 = open_form({ title = "t", date = "2026-07-15", category = nil,
@@ -91,6 +97,11 @@ h.eq(l2[7], "第一行", "备注第 1 行")
 h.eq(l2[8], "第二行", "备注第 2 行")
 press(buf2, "n", "<CR>")
 h.eq(get2() and get2().notes, "第一行\n第二行", "备注往返")
+
+local empty_buf, _, get_empty = open_form({ title = "空备注", date = "2026-07-15", category = nil,
+  priority = "medium", done = false, notes = "" })
+press(empty_buf, "n", "<CR>")
+h.eq(get_empty() and get_empty().notes, "", "未填写 notes 仍保存为空字符串")
 
 -- 5b. repeat 字段往返 + 校验
 local buf4, _, get4 = open_form({ title = "周期任务", date = "2026-07-15", category = nil,
