@@ -406,5 +406,54 @@ return {
 			end,
 			desc = "Debug quit",
 		},
+		{
+			"<F8>",
+			function()
+				require("dap").continue()
+			end,
+			desc = "Debug start/continue (F8)",
+		},
+		{
+			"<S-F8>",
+			function()
+				require("dap").terminate()
+			end,
+			desc = "Debug stop (Shift+F8)",
+		},
+		{
+			"<C-S-F8>",
+			function()
+				require("dap").restart()
+			end,
+			desc = "Debug restart (Ctrl+Shift+F8)",
+		},
+		{
+			"<F9>",
+			function()
+				require("dap").toggle_breakpoint()
+			end,
+			desc = "Debug toggle breakpoint (F9)",
+		},
+		{
+			"<F10>",
+			function()
+				require("dap").step_over()
+			end,
+			desc = "Debug step over (F10)",
+		},
+		{
+			"<F7>",
+			function()
+				require("dap").step_into()
+			end,
+			desc = "Debug step into (F7)",
+		},
+		{
+			"<S-F7>",
+			function()
+				require("dap").step_out()
+			end,
+			desc = "Debug step out (Shift+F7)",
+		},
 	},
 }
