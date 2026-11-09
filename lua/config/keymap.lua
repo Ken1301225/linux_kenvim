@@ -3,9 +3,4 @@ vim.g.mapleader = " "
 
 vim.g.maplocalleader = ","
 
-for _, direction in ipairs({"h", "j", "k", "l"}) do
-    vim.keymap.set("n", "<C-" .. direction .. ">", "<Cmd>wincmd " .. direction .. "<CR>", {
-        silent = true,
-        desc = "Move to " .. direction .. " window",
-    })
-end
+-- Ctrl+h/j/k/l 由 vim-tmux-navigator 管理。

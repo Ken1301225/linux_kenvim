@@ -24,10 +24,10 @@ return {
         }
     },
     keys = {
-        { "<leader>bh", ":BufferLineCyclePrev<CR>", silent = true },
-        { "<leader>bl", ":BufferLineCycleNext<CR>", silent = true },
-        { "<leader>bp", ":BufferLinePick<CR>", silent = true },
-        { "<leader>bd", ":bdelete<CR>",             silent = true },
+        { "<leader>bh", ":BufferLineCyclePrev<CR>", silent = true, desc = "Previous buffer" },
+        { "<leader>bl", ":BufferLineCycleNext<CR>", silent = true, desc = "Next buffer" },
+        { "<leader>bp", ":BufferLinePick<CR>", silent = true, desc = "Pick buffer" },
+        { "<leader>bd", ":bdelete<CR>", silent = true, desc = "Close buffer" },
     },
     lazy = false,
 }

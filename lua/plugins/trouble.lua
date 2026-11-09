@@ -9,6 +9,6 @@ return {
     })
 
     -- 快捷键
-    vim.keymap.set("n", "<leader>xx", "<cmd>Trouble diagnostics<cr>", { desc = "Toggle diagnostics" })
+    vim.keymap.set("n", "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", { desc = "Toggle diagnostics" })
   end,
 }

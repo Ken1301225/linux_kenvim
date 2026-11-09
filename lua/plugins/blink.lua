@@ -56,9 +56,9 @@ return {
                     opts = {
                         complete_func = function()
                             if vim.bo.filetype ~= "tex" then
-                                return function() end
+                                return nil
                             end
-                            return vim.bo.omnifunc ~= "" and vim.bo.omnifunc or function() end
+                            return vim.bo.omnifunc ~= "" and vim.bo.omnifunc or nil
                         end,
                     },
                 },

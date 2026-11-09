@@ -1,6 +1,9 @@
 vim.opt.number = true
 vim.opt.relativenumber = true
 vim.opt.cursorline = true
+vim.opt.signcolumn = "yes"
+vim.opt.scrolloff = 6
+vim.opt.undofile = true
 vim.opt.expandtab = true
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 0
@@ -52,14 +55,6 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 vim.opt.fileformats = {"unix", "dos"}
-
--- 禁用内置的 code action lightbulb (💡)
-vim.lsp.config.code_action = {
-  lightbulb = {
-    enable = false,
-  },
-}
-
 
 vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "CursorHoldI", "FocusGained" }, {
   pattern = "*",

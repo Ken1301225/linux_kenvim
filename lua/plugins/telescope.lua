@@ -28,5 +28,8 @@ return {
 		{ "<leader>fg", ":Telescope live_grep<CR>", desc="live_grep" },
 		{ "<leader>fb", ":Telescope buffers<CR>", desc="buffers" },
 		{ "<leader>fh", ":Telescope help_tags<CR>", desc="help_tags" },
+		{ "<leader>fo", "<cmd>Telescope oldfiles<CR>", desc = "Recent files" },
+		{ "<leader>fw", "<cmd>Telescope grep_string<CR>", desc = "Find word under cursor" },
+		{ "<leader>fr", "<cmd>Telescope resume<CR>", desc = "Resume last search" },
 	},
 }

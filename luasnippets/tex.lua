@@ -115,7 +115,7 @@ local snips = {
 	\centering
 	\includegraphics[width={}]{{{}}}
 	\caption{{{} }}
-	\label{{fig:{} }}
+	\label{{fig:{}}}
 \end{{figure}}
 ]], { i(1, "0.8\\textwidth"), i(2), i(3), i(4) })),
 
@@ -123,7 +123,7 @@ local snips = {
 \begin{{table}}[htbp]
 	\centering
 	\caption{{{} }}
-	\label{{tab:{} }}
+	\label{{tab:{}}}
 	\begin{{tabular}}{{{}}}
 		\toprule
 		{}
@@ -140,17 +140,17 @@ local snips = {
 
 	s("sec", fmt([[
 \section{{{} }}
-\label{{sec:{} }}
+\label{{sec:{}}}
 ]], { i(1), i(2) })),
 
 	s("sub", fmt([[
 \subsection{{{} }}
-\label{{subsec:{} }}
+\label{{subsec:{}}}
 ]], { i(1), i(2) })),
 
 	s("ssub", fmt([[
 \subsubsection{{{} }}
-\label{{subsec:{} }}
+\label{{subsec:{}}}
 ]], { i(1), i(2) })),
 
 	-- ============================================================
@@ -317,10 +317,10 @@ local snips = {
 	-- Citations & Refs
 	-- ============================================================
 
-	s("cit", fmt("\\cite{{ {} }}", { i(1) })),
-	s("ref", fmt("\\ref{{ {} }}", { i(1) })),
-	s("eqref", fmt("\\eqref{{ {} }}", { i(1) })),
-	s("lab", fmt("\\label{{ {} }}", { i(1) })),
+	s("cit", fmt("\\cite{{{}}}", { i(1) })),
+	s("ref", fmt("\\ref{{{}}}", { i(1) })),
+	s("eqref", fmt("\\eqref{{{}}}", { i(1) })),
+	s("lab", fmt("\\label{{{}}}", { i(1) })),
 }
 
 return snips

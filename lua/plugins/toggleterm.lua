@@ -49,9 +49,9 @@ return {
 		end
 
 		-- 绑定快捷键，删除了之前的 Windows powershell 快捷键
-		vim.api.nvim_set_keymap("n", "<leader>tb", "<cmd>lua _BASH_TOGGLE()<CR>", { noremap = true, silent = true })
-		vim.api.nvim_set_keymap("n", "<leader>tg", "<cmd>lua _LAZYGIT_TOGGLE()<CR>", { noremap = true, silent = true })
-		vim.api.nvim_set_keymap("n", "<leader>tp", "<cmd>lua _PYTHON_TOGGLE()<CR>", { noremap = true, silent = true })
+		vim.api.nvim_set_keymap("n", "<leader>tb", "<cmd>lua _BASH_TOGGLE()<CR>", { noremap = true, silent = true, desc = "Bash terminal" })
+		vim.api.nvim_set_keymap("n", "<leader>tg", "<cmd>lua _LAZYGIT_TOGGLE()<CR>", { noremap = true, silent = true, desc = "Lazygit" })
+		vim.api.nvim_set_keymap("n", "<leader>tp", "<cmd>lua _PYTHON_TOGGLE()<CR>", { noremap = true, silent = true, desc = "IPython terminal" })
 
 		function _G.set_terminal_keymaps()
 			local opts = { buffer = 0 }
